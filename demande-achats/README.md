@@ -31,7 +31,18 @@ montant engagé), des filtres, un export CSV / JSON et des données de démonstr
 4. Pour tester tout le circuit, changer de rôle à chaque étape (Demandeur → Responsable service → Achats → …),
    ou choisir **Administrateur**, qui peut réaliser toutes les actions.
 
-En mode local, les données restent **uniquement dans ce navigateur** (localStorage).
+### La base est dans le fichier HTML
+
+Sans Supabase, les données sont enregistrées dans le navigateur (localStorage). Pour les **transporter** :
+
+- *Paramètres → **Enregistrer le fichier avec ses données*** télécharge un fichier `.html` unique qui contient
+  l'application **et** toutes les DA (bloc `<script id="db-embarquee">`). Ouvert sur un autre PC ou envoyé
+  à un collègue, ce fichier charge automatiquement ses données (une confirmation est demandée si le navigateur
+  contient déjà d'autres DA).
+- *Importer / Exporter une sauvegarde (JSON)* permet aussi de sauvegarder et de restaurer les données.
+
+⚠️ Chaque fichier est une copie : si deux personnes modifient chacune leur copie, les modifications ne se
+fusionnent pas. Pour travailler à plusieurs en même temps, il faut passer à Supabase (phase 2).
 
 ## Phase 2 – Base Supabase
 

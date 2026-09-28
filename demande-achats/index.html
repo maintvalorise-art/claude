@@ -148,6 +148,8 @@ tr.retenue td{background:var(--ok-soft)}
 <main id="app"><div class="empty">Chargement…</div></main>
 <div class="toast" id="toast"></div>
 
+<!-- Base de données embarquée : remplie automatiquement par « Enregistrer le fichier avec ses données » -->
+<script type="application/json" id="db-embarquee"></script>
 <script src="config.js"></script>
 <script>
 "use strict";
@@ -299,6 +301,32 @@ function loadScript(src){
 let store = LocalStore;
 let DB = [];   // cache des demandes
 async function reload(){ DB = await store.list(); }
+
+/* ===================== Base embarquée dans le fichier HTML ===================== */
+function snapshot(){ return { format: "PR-ACH-001", saved_at: new Date().toISOString(), db: LocalStore.load(), settings }; }
+function applySnapshot(snap){
+  const db = snap.db;
+  db.seq = Math.max(num(db.seq), ...db.demandes.map(d => num(String(d.numero || "").split("-").pop())), 0);
+  db.demandes.forEach(d => { d.offres = d.offres || []; d.historique = d.historique || []; });
+  LocalStore.save(db);
+  if (snap.settings){ settings = Object.assign({}, DEFAULT_SETTINGS, snap.settings); LS.set("da_settings", JSON.stringify(settings)); }
+}
+let embedInfo = null;
+function loadEmbedded(){
+  const el = document.getElementById("db-embarquee");
+  const txt = el ? el.textContent.trim() : "";
+  if (!txt) return;
+  let snap; try { snap = JSON.parse(txt); } catch(e){ toast("Données embarquées illisibles", true); return; }
+  if (!snap.db || !Array.isArray(snap.db.demandes)) return;
+  embedInfo = { saved_at: snap.saved_at, n: snap.db.demandes.length };
+  if (LS.get("da_embed_charge") === snap.saved_at) return;          // déjà chargé dans ce navigateur
+  const local = LocalStore.load();
+  const ok = !local.demandes.length || confirm(
+    `Ce fichier contient ${snap.db.demandes.length} DA enregistrées le ${fmtDT(snap.saved_at)}.\n` +
+    `Les charger ? (remplace les ${local.demandes.length} DA déjà présentes dans ce navigateur)`);
+  if (ok){ applySnapshot(snap); toast("Données du fichier chargées (" + snap.db.demandes.length + " DA)"); }
+  LS.set("da_embed_charge", snap.saved_at);
+}
 const findDA = id => DB.find(d => d.id === id);
 
 /* ===================== Règles métier / habilitations (§14) ===================== */
@@ -776,10 +804,21 @@ function viewParam(){
   </form>
   <div class="card">
     <h2>Données</h2>
-    <p>Mode actuel : <b>${USE_SUPABASE ? "Supabase (base partagée)" : "Test local — données stockées dans ce navigateur uniquement"}</b></p>
+    <p>Mode actuel : <b>${USE_SUPABASE ? "Supabase (base partagée)" : "Base dans le fichier HTML (enregistrée dans ce navigateur)"}</b></p>
+    ${USE_SUPABASE ? "" : `
+    <div class="alert info">
+      <b>La base est dans le fichier HTML.</b> Pour la transmettre à un collègue ou l'ouvrir sur un autre PC, cliquez sur
+      « Enregistrer le fichier avec ses données » : vous obtenez un fichier HTML unique qui contient l'application <i>et</i> toutes les demandes.
+      À l'ouverture, ce fichier charge automatiquement ses données.
+      ${embedInfo ? `<br>Fichier actuel : données embarquées du <b>${fmtDT(embedInfo.saved_at)}</b> (${embedInfo.n} DA).` : ""}
+    </div>
+    <div class="btns">
+      <button class="btn primary" data-act="saveHTML">Enregistrer le fichier avec ses données</button>
+      <button class="btn" data-act="importJSON">Importer une sauvegarde (JSON)</button>
+    </div>`}
     <div class="btns">
       <button class="btn" data-act="seed">Charger des données de démonstration</button>
-      <button class="btn" data-act="exportJSON">Exporter tout (JSON)</button>
+      <button class="btn" data-act="exportJSON">Exporter une sauvegarde (JSON)</button>
       ${USE_SUPABASE ? "" : `<button class="btn danger" data-act="resetAll">Effacer toutes les données locales</button>`}
     </div>
   </div>
@@ -862,7 +901,37 @@ const ACTIONS = {
     const csv = "﻿" + cols.join(";") + "\n" + DB.map(d => cols.map(c => q(c === "statut" ? (STATUTS[d.statut]||{}).l : d[c])).join(";")).join("\n");
     download("demandes_achat_" + today() + ".csv", csv, "text/csv;charset=utf-8");
   },
-  exportJSON(){ download("demandes_achat_" + today() + ".json", JSON.stringify(DB, null, 2), "application/json"); },
+  exportJSON(){
+    const content = USE_SUPABASE ? JSON.stringify(DB, null, 2) : JSON.stringify(snapshot(), null, 2);
+    download("demandes_achat_" + today() + ".json", content, "application/json");
+  },
+  saveHTML(){
+    const snap = snapshot();
+    const doc = document.documentElement.cloneNode(true);
+    doc.querySelector("#app").innerHTML = '<div class="empty">Chargement…</div>';
+    doc.querySelector("#toast").innerHTML = "";
+    doc.querySelectorAll(".modal-root").forEach(x => x.remove());
+    doc.querySelector("#menu").querySelectorAll("a").forEach(a => a.classList.remove("active"));
+    doc.querySelectorAll("script[src*='supabase']").forEach(x => x.remove());
+    doc.querySelector("body").classList.remove("printing");
+    doc.querySelector("#db-embarquee").textContent = JSON.stringify(snap).replace(/</g, "\\u003c");
+    const html = "<!doctype html>\n" + doc.outerHTML;
+    download("demandes_achat_" + today() + ".html", html, "text/html;charset=utf-8");
+    toast("Fichier HTML enregistré avec " + snap.db.demandes.length + " DA");
+  },
+  importJSON(){
+    const inp = document.createElement("input"); inp.type = "file"; inp.accept = ".json,application/json";
+    inp.onchange = async () => {
+      try {
+        const data = JSON.parse(await inp.files[0].text());
+        const snap = Array.isArray(data) ? { db: { seq: data.length, demandes: data } } : data;
+        if (!snap.db || !Array.isArray(snap.db.demandes)) throw new Error("Fichier de sauvegarde invalide.");
+        if (!confirm(`Importer ${snap.db.demandes.length} DA ? Les données actuelles de ce navigateur seront remplacées.`)) return;
+        applySnapshot(snap); await reload(); toast("Sauvegarde importée"); render();
+      } catch(err){ toast(err.message, true); }
+    };
+    inp.click();
+  },
   async resetAll(){ if (!confirm("Effacer toutes les demandes stockées dans ce navigateur ?")) return; await store.reset(); await reload(); toast("Données effacées"); render(); },
   async seed(){ await seedDemo(); await reload(); toast("Données de démonstration chargées"); location.hash = "#/liste"; render(); }
 };
@@ -1065,6 +1134,7 @@ window.addEventListener("hashchange", render);
       m.textContent = "Mode test local";
     }
   } else m.textContent = "Mode test local";
+  if (!USE_SUPABASE) loadEmbedded();
   try { await reload(); }
   catch(err){ toast("Erreur de chargement : " + err.message, true); DB = []; }
   render();
