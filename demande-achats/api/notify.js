@@ -46,8 +46,9 @@ module.exports = async (req, res) => {
       try {
         const r = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${RESEND}` } });
         const j = await r.json().catch(() => ({}));
-        resend = r.ok ? { cle_valide: true, domaines: (j.data || []).map(d => `${d.name} (${d.status})`) }
-                      : { cle_valide: (r.status === 401 || r.status === 403) ? false : null, statut_http: r.status, message: j.message };
+        if (r.ok) resend = { cle_valide: true, domaines: (j.data || []).map(d => `${d.name} (${d.status})`) };
+        else if (/restricted to only send/i.test(j.message || "")) resend = { cle_valide: true, acces: "envoi uniquement (Sending access) : normal" };
+        else resend = { cle_valide: (r.status === 401 || r.status === 403) ? false : null, statut_http: r.status, message: j.message };
       } catch (e) { resend = { erreur: e.message }; }
     }
     return res.status(200).json({
