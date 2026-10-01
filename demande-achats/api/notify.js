@@ -44,7 +44,9 @@ module.exports = async (req, res) => {
     const user = await ur.json();
 
     const db = async path => {
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` } });
+      // Nouvelles clés Supabase (sb_secret_…) : en-tête apikey seul ; anciennes clés (JWT) : apikey + Authorization
+      const headers = SERVICE.startsWith("sb_") ? { apikey: SERVICE } : { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` };
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers });
       if (!r.ok) throw new Error("Lecture base : " + r.status + " " + (await r.text()));
       return r.json();
     };
