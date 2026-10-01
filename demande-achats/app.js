@@ -765,6 +765,7 @@ async function envoyerDA(da){
   toast(res.email ? `Demande ${updated.numero} envoyée : PDF téléchargé, administration notifiée par email.`
                   : `Demande ${updated.numero} envoyée : PDF téléchargé, administration notifiée dans l'application.`);
   if (!res.email) toast("Email non envoyé : " + (res.raison || res.error || "raison inconnue") + " (détails : /api/notify)", true);
+  else if (res.refus && res.refus.length) toast("Email non reçu par : " + res.refus.join(", "), true);
   await reloadAll();
   location.hash = "#/da/" + updated.id;
   render();

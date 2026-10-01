@@ -150,13 +150,22 @@ module.exports = async (req, res) => {
       ${lien ? `<p><a href="${esc(lien)}" style="display:inline-block;background:#1f5fbf;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none">Ouvrir la demande</a></p>` : ""}
       <p style="color:#66727f;font-size:12px">Message automatique — procédure PR-ACH-001.</p></div>`;
 
-    const r = await fetch(env.RESEND_API_URL || "https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: FROM, to, subject, html, attachments })
-    });
-    if (!r.ok) return res.status(502).json({ email: false, raison: "Resend : " + r.status + " " + (await r.text()) });
-    return res.status(200).json({ email: true, destinataires: to.length });
+    // Un envoi par destinataire : si Resend refuse une adresse (ex. mode test), les autres reçoivent quand même.
+    const envoyes = [], refus = [];
+    for (const dest of to) {
+      const r = await fetch(env.RESEND_API_URL || "https://api.resend.com/emails", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ from: FROM, to: [dest], subject, html, attachments })
+      });
+      if (r.ok) envoyes.push(dest);
+      else {
+        const j = await r.json().catch(() => ({}));
+        refus.push(`${dest} (${/testing emails/i.test(j.message || "") ? "mode test Resend : domaine non vérifié" : (j.message || "HTTP " + r.status)})`);
+      }
+    }
+    if (!envoyes.length) return res.status(502).json({ email: false, raison: "Resend a refusé : " + refus.join(", ") });
+    return res.status(200).json({ email: true, destinataires: envoyes, refus });
   } catch (err) {
     return res.status(500).json({ email: false, raison: err.message });
   }
