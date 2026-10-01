@@ -1,86 +1,136 @@
 # Demandes d'Achat – PR-ACH-001
 
-Application web simple (HTML + JavaScript, sans framework) qui applique la procédure
-**PR-ACH-001 v01** :
+Application web de gestion des demandes d'achat :
 
-Besoin → DA → Validation → Consultation fournisseurs → Analyse des offres → Validation achat → BC → Réception → Contrôle → Facture / Clôture
+- **HTML + JavaScript** (aucun framework) ;
+- **Supabase** pour les comptes, la base de données et les notifications ;
+- **Vercel** pour l'hébergement et l'envoi des emails.
 
-## Fonctionnalités
+## Ce que fait l'application
 
-| Procédure | Dans l'application |
+### Compte Demandeur
+- **Fiche de demande d'achat :** service, centre de coût, catégorie, date souhaitée, articles (désignation, référence, quantité, unité, prix estimé), motif, urgence et impact, vérifications du stock et des commandes en cours, pièces jointes (liens).
+- **Brouillon :** la demande peut être enregistrée, modifiée ou supprimée tant qu'elle n'est pas envoyée.
+- **« Valider et envoyer » :**
+  - le **PDF** de la fiche se télécharge ;
+  - l'administration reçoit une **notification** dans l'application et un **email** avec le PDF en pièce jointe ;
+  - la demande ne peut plus être modifiée.
+- **« Mes demandes » :** la liste de toutes ses demandes, avec pour chacune :
+  - le statut ;
+  - la validation finance ;
+  - la réception ;
+  - le commentaire de l'administration ;
+  - l'historique complet.
+- **Notifications :** une cloche 🔔 et un email à chaque changement fait par l'administration.
+
+### Compte Admin
+- **Tableau de bord :**
+  - nombre de demandes reçues, en attente, en cours, validées et refusées ;
+  - validation finance : en attente / validées ;
+  - réception : en attente / terminées ;
+  - montant validé ;
+  - répartition par service ;
+  - liste « À traiter », avec les urgences en premier.
+- **Traitement d'une demande :**
+  - statut **En attente / En cours de traitement / Validée / Refusée**, avec un commentaire visible par le demandeur (obligatoire en cas de refus) ;
+  - **validation finance** : en attente / validée / refusée / non requise, avec commentaire ;
+  - **commande et réception** : n° BC, fournisseur retenu, montant réel, réception (en attente / partielle / reçue / non conforme), date et remarque.
+- **Toutes les demandes :** recherche, filtres et export CSV.
+- **Utilisateurs :** attribuer le rôle Admin, désactiver un compte.
+
+### Sécurité
+La sécurité est appliquée **dans la base de données** (Row Level Security), pas seulement dans l'interface :
+- un demandeur ne voit que ses propres demandes ;
+- un demandeur ne peut plus modifier une demande après l'envoi ;
+- un demandeur ne peut ni changer un statut ni se donner le rôle admin ;
+- l'historique et les notifications sont créés automatiquement par la base.
+
+---
+
+## Mise en place (environ 20 minutes)
+
+### Étape 1 – Supabase (base de données et comptes)
+
+1. Créez un compte sur <https://supabase.com>, puis cliquez sur **New project** (région : Europe, par exemple Frankfurt).
+2. Ouvrez **SQL Editor → New query**, collez tout le contenu de `supabase/schema.sql`, puis cliquez sur **Run**.
+3. Ouvrez **Authentication → Sign In / Providers → Email** :
+   - pour les tests, vous pouvez désactiver **Confirm email** : les comptes sont alors actifs tout de suite ;
+   - en production, laissez-le activé : chaque utilisateur confirme son adresse.
+4. Ouvrez **Project Settings → API** et notez :
+   - `Project URL` → `SUPABASE_URL`
+   - `anon public` → `SUPABASE_ANON_KEY`
+   - `service_role` → `SUPABASE_SERVICE_ROLE_KEY` (⚠️ **secrète** : uniquement dans Vercel, jamais dans `config.js`)
+
+### Étape 2 – Emails (Resend, gratuit jusqu'à 3 000 emails par mois)
+
+1. Créez un compte sur <https://resend.com>, puis ouvrez **API Keys → Create API Key** et notez la clé (`RESEND_API_KEY`).
+2. Choisissez l'expéditeur :
+   - **Pour tester :** utilisez `EMAIL_FROM = Achats <onboarding@resend.dev>`. Resend n'envoie alors **qu'à l'adresse de votre compte Resend**.
+   - **Pour la production :** ouvrez **Domains → Add Domain**, ajoutez votre domaine (par ex. `valorise.ma`), créez les enregistrements DNS indiqués, puis utilisez `EMAIL_FROM = Achats <achats@valorise.ma>`.
+
+Sans Resend, l'application fonctionne quand même : seules les notifications dans l'application (🔔) sont envoyées.
+
+### Étape 3 – Vercel (mise en ligne)
+
+1. Créez un compte sur <https://vercel.com> et connectez-le à GitHub.
+2. Cliquez sur **Add New → Project** et importez ce dépôt.
+3. **Root Directory** : `demande-achats`. **Framework Preset** : `Other`.
+4. Dans **Environment Variables**, ajoutez :
+
+| Variable | Valeur |
 |---|---|
-| §4 Identification du besoin | Vérification du stock et des commandes en cours, champs spécifiques aux pièces de rechange (marque, modèle machine/véhicule) |
-| §5 Création de la DA | Tous les champs obligatoires, numérotation automatique `DA-AAAA-0001`, brouillon ou soumission directe |
-| §6 Validation | Liste des 6 points à contrôler, décision valider / refuser / renvoyer au demandeur, commentaire obligatoire en cas de refus |
-| §7-8 Consultation & analyse | Saisie des offres (prix, transport, délai, paiement, garantie, disponibilité), tableau comparatif avec meilleur prix et meilleur délai mis en évidence, avis technique, justification du choix |
-| §9 Validation achat | Matrice de validation configurable (par défaut ≤ 5 000 → Responsable service, ≤ 50 000 → Finance, au-delà → Direction) |
-| §10 Bon de commande | Numéro `BC-AAAA-0001`, BC imprimable, confirmation du fournisseur avec date de livraison |
-| §11 Réception | Contrôle de la quantité, de la conformité, de l'état, de la référence, de la qualité et des documents ; non-conformité transmise aux Achats puis traitée |
-| §12 Clôture & traçabilité | Contrôle de la facture, clôture de la DA, chaîne DA → Devis → Validation → BC → Réception → Facture, historique horodaté |
-| §13 Achats urgents | Niveau Urgent / Critique avec impact (Production, Client, Sécurité), bandeau `URGENT – IMPACT …`, circuit d'urgence ouvert à la Direction |
-| §14 Responsabilités | Sélecteur de rôle : chaque acteur voit uniquement les actions qui le concernent |
+| `SUPABASE_URL` | URL du projet Supabase |
+| `SUPABASE_ANON_KEY` | clé `anon public` |
+| `SUPABASE_SERVICE_ROLE_KEY` | clé `service_role` (secrète) |
+| `RESEND_API_KEY` | clé Resend |
+| `EMAIL_FROM` | ex. `Achats <onboarding@resend.dev>` |
+| `APP_URL` | l'adresse Vercel, ex. `https://demande-achats.vercel.app` (pour le lien dans les emails) |
+| `ENTREPRISE` | nom affiché sur l'application et le PDF, ex. `Valorise SARL` |
+| `ADMIN_EMAILS` | *(optionnel)* adresses supplémentaires qui reçoivent les nouvelles demandes, séparées par des virgules |
 
-Vous trouverez aussi un tableau de bord (DA à traiter, urgences, commandes en attente de réception,
-montant engagé), des filtres, un export CSV / JSON et des données de démonstration.
+5. Cliquez sur **Deploy**.
+6. De retour dans Supabase, ouvrez **Authentication → URL Configuration** et mettez l'adresse Vercel dans **Site URL** et dans **Redirect URLs**. C'est nécessaire pour les liens de confirmation et de « mot de passe oublié ».
 
-## Phase 1 – Test en local (aucune installation)
+### Étape 4 – Créer le premier administrateur
 
-1. Ouvrir `index.html` dans un navigateur (double-clic).
-2. En haut à droite, saisir votre nom et choisir un rôle.
-3. *Paramètres → Charger des données de démonstration* pour disposer d'exemples.
-4. Pour tester tout le circuit, changer de rôle à chaque étape (Demandeur → Responsable service → Achats → …),
-   ou choisir **Administrateur**, qui peut réaliser toutes les actions.
-
-### La base est dans le fichier HTML
-
-Sans Supabase, les données sont enregistrées dans le navigateur (localStorage). Pour les **transporter** :
-
-- *Paramètres → **Enregistrer le fichier avec ses données*** télécharge un fichier `.html` unique qui contient
-  l'application **et** toutes les DA (bloc `<script id="db-embarquee">`). Ouvert sur un autre PC ou envoyé
-  à un collègue, ce fichier charge automatiquement ses données (une confirmation est demandée si le navigateur
-  contient déjà d'autres DA).
-- *Importer / Exporter une sauvegarde (JSON)* permet aussi de sauvegarder et de restaurer les données.
-
-⚠️ Chaque fichier est une copie : si deux personnes modifient chacune leur copie, les modifications ne se
-fusionnent pas. Pour travailler à plusieurs en même temps, il faut passer à Supabase (phase 2).
-
-## Phase 2 – Base Supabase
-
-1. Créer un projet sur <https://supabase.com>.
-2. *SQL Editor* → coller puis exécuter le contenu de `supabase/schema.sql`.
-3. *Project Settings → API* : copier l'**URL du projet** et la clé **anon public**.
-4. Test local avec Supabase : les renseigner dans `config.js` :
-   ```js
-   window.APP_CONFIG = { SUPABASE_URL: "https://xxxx.supabase.co", SUPABASE_ANON_KEY: "eyJ...", DEVISE: "MAD" };
+1. Ouvrez l'application et cliquez sur **Créer un compte** avec votre email.
+2. Dans Supabase, ouvrez **SQL Editor** et exécutez (en remplaçant l'email) :
+   ```sql
+   update public.profiles set role = 'admin' where email = 'votre.email@exemple.com';
    ```
-   Le badge en haut passe de « Mode test local » à « Supabase ».
+3. Rechargez l'application : le menu **Tableau de bord / Toutes les demandes / Utilisateurs** apparaît.
+   Les administrateurs suivants peuvent ensuite être nommés depuis la page **Utilisateurs**.
 
-## Phase 3 – Déploiement Vercel
+Les collaborateurs créent eux-mêmes leur compte : ils sont **Demandeurs** par défaut.
 
-1. Pousser le dépôt sur GitHub.
-2. Sur <https://vercel.com> : *Add New → Project* → importer le dépôt.
-3. **Root Directory** : `demande-achats`. Framework : *Other* (le fichier `vercel.json` gère le reste).
-4. *Environment Variables* : `SUPABASE_URL` et `SUPABASE_ANON_KEY` (et, en option, `DEVISE`).
-5. *Deploy*. Au build, `scripts/gen-config.js` génère `config.js` à partir de ces variables.
-
-## ⚠️ Sécurité avant la mise en production
-
-- Le schéma active des politiques RLS **ouvertes** (`test_acces_ouvert`) : n'importe qui ayant l'URL peut lire et écrire.
-  C'est adapté au test uniquement.
-- Le rôle est choisi librement dans l'interface : c'est une **simulation**. Pour la production, il faudra :
-  1. activer Supabase Auth (email / mot de passe ou lien magique) ;
-  2. créer une table `profils (user_id, nom, service, role)` ;
-  3. remplacer les politiques par des règles basées sur `auth.uid()` et le rôle, en contrôlant les changements de statut côté base
-     (fonctions RPC ou triggers) ;
-  4. stocker les pièces jointes dans Supabase Storage (le champ « pièces jointes » est aujourd'hui un simple texte ou lien).
+---
 
 ## Fichiers
 
 ```
 demande-achats/
-├── index.html            Application complète (UI + logique + stockage local/Supabase)
-├── config.js             Configuration (vide = mode local)
-├── supabase/schema.sql   Tables demandes, offres, historique + numérotation + RLS de test
-├── scripts/gen-config.js Génère config.js depuis les variables Vercel
-└── vercel.json           Configuration du déploiement statique
+├── index.html            Interface (styles inclus)
+├── app.js                Logique : comptes, fiche, PDF, tableau de bord, notifications
+├── config.js             Configuration côté navigateur (générée par Vercel)
+├── api/notify.js         Fonction Vercel : envoi des emails via Resend
+├── supabase/schema.sql   Tables, règles de sécurité (RLS), historique, notifications
+├── scripts/gen-config.js Génère config.js à partir des variables Vercel
+└── vercel.json           Configuration du déploiement
 ```
+
+## Test sur votre PC (optionnel)
+
+Pour tester sans Vercel, renseignez `SUPABASE_URL` et `SUPABASE_ANON_KEY` dans `config.js`, puis servez le dossier :
+
+```
+npx serve demande-achats
+```
+
+Ouvrir `index.html` directement par double-clic ne suffit pas, car la connexion à Supabase a besoin d'une adresse `http://`.
+
+Dans ce mode, tout fonctionne sauf l'email : la fonction `/api` n'existe que sur Vercel.
+
+## Évolutions possibles
+- **Pièces jointes :** téléverser de vrais fichiers (photos, devis) avec Supabase Storage.
+- **Rôles supplémentaires :** Responsable service, Finance, Magasin, Direction, chacun avec ses propres validations.
+- **Inscriptions :** limiter la création de comptes aux adresses de l'entreprise (`@valorise.ma`).

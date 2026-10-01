@@ -1,10 +1,12 @@
 // Configuration de l'application Demandes d'Achat (PR-ACH-001).
-// Laisser SUPABASE_URL / SUPABASE_ANON_KEY vides => mode TEST local (données dans le navigateur).
-// Renseigner les deux valeurs => mode Supabase (base partagée).
-// Sur Vercel, ce fichier est régénéré à partir des variables d'environnement
-// SUPABASE_URL et SUPABASE_ANON_KEY (voir scripts/gen-config.js).
+// Sur Vercel, ce fichier est régénéré automatiquement à partir des variables d'environnement
+// SUPABASE_URL, SUPABASE_ANON_KEY, ENTREPRISE et DEVISE (voir scripts/gen-config.js).
+// Pour un test sur votre PC, renseignez directement les valeurs ci-dessous.
+// La clé "anon public" peut être publique : la sécurité est assurée par les règles RLS de la base.
+// Ne mettez JAMAIS la clé "service_role" dans ce fichier.
 window.APP_CONFIG = {
   SUPABASE_URL: "",
   SUPABASE_ANON_KEY: "",
+  ENTREPRISE: "Mon entreprise",
   DEVISE: "MAD"
 };
