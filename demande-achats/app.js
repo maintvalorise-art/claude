@@ -7,6 +7,9 @@
 const CFG = Object.assign({
   SUPABASE_URL: "", SUPABASE_ANON_KEY: "", ENTREPRISE: "Mon entreprise", DEVISE: "MAD", NOTIFY_URL: "/api/notify"
 }, window.APP_CONFIG || {});
+// Tolère une URL copiée avec /rest/v1/ ou / final, et des espaces autour des valeurs
+CFG.SUPABASE_URL = String(CFG.SUPABASE_URL || "").trim().replace(/\/(rest|auth)\/v1\/?$/, "").replace(/\/+$/, "");
+CFG.SUPABASE_ANON_KEY = String(CFG.SUPABASE_ANON_KEY || "").trim();
 
 const SERVICES   = ["Production","Maintenance","Logistique","Qualité","HSE","Administration","Commercial","Achats","Informatique","Autre"];
 const CATEGORIES = ["Matières premières","Pièces de rechange","Consommables","Équipements et outillages","Prestations de maintenance","Services externes","Fournitures administratives","EPI et équipements de sécurité","Achats clients / projets"];
@@ -73,6 +76,9 @@ function traduireErreur(m){
   if (/Email not confirmed/i.test(m)) return "Email non confirmé : cliquez sur le lien reçu par email.";
   if (/already registered|already exists/i.test(m)) return "Un compte existe déjà avec cet email.";
   if (/Password should be at least/i.test(m)) return "Le mot de passe doit contenir au moins 6 caractères.";
+  if (/does not exist|Could not find the table|schema cache/i.test(m)) return "La base n'est pas encore installée : dans Supabase, ouvrez SQL Editor et exécutez le fichier supabase/schema.sql.";
+  if (/Invalid API key|No API key/i.test(m)) return "Clé Supabase invalide : vérifiez SUPABASE_ANON_KEY (clé « anon public »).";
+  if (/Failed to fetch|NetworkError/i.test(m)) return "Impossible de joindre Supabase : vérifiez SUPABASE_URL (ex : https://xxxx.supabase.co).";
   if (/JSON object requested, multiple \(or no\) rows/i.test(m)) return "Action impossible : demande introuvable ou déjà envoyée.";
   return m;
 }
@@ -141,7 +147,7 @@ async function afterLogin(){
   const { data: { user } } = await sb.auth.getUser();
   if (!user){ renderAuth("login"); return; }
   const { data: p, error } = await sb.from("profiles").select("*").eq("id", user.id).single();
-  if (error || !p){ toast("Profil introuvable : " + (error ? error.message : ""), true); await sb.auth.signOut(); return; }
+  if (error || !p){ toast("Profil introuvable : " + (error ? traduireErreur(error.message) : "le compte a été créé avant l'installation de la base."), true); await sb.auth.signOut(); return; }
   if (!p.actif){ toast("Votre compte est désactivé. Contactez l'administrateur.", true); await sb.auth.signOut(); return; }
   profile = p;
   $("#top").hidden = false;

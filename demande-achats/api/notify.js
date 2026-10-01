@@ -25,7 +25,7 @@ module.exports = async (req, res) => {
   if (req.method !== "POST") return res.status(405).json({ error: "Méthode non autorisée" });
 
   const env = process.env;
-  const SUPABASE_URL = (env.SUPABASE_URL || "").replace(/\/$/, "");
+  const SUPABASE_URL = (env.SUPABASE_URL || "").trim().replace(/\/(rest|auth)\/v1\/?$/, "").replace(/\/+$/, "");
   const SERVICE = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!SUPABASE_URL || !SERVICE || !env.SUPABASE_ANON_KEY) {
     return res.status(200).json({ email: false, raison: "Variables Supabase manquantes sur le serveur" });
