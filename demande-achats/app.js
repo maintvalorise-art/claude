@@ -106,12 +106,35 @@ const isAdmin = () => profile && profile.role === "admin";
   else if (!session) renderAuth("login");
 })();
 
-function renderSetup(){
-  $("#app").innerHTML = `<div class="card" style="max-width:720px;margin:30px auto">
-    <h1>Configuration requise</h1>
-    <p>L'application n'est pas encore reliée à Supabase. Renseignez <code>SUPABASE_URL</code> et <code>SUPABASE_ANON_KEY</code>
-    dans <code>config.js</code> (ou dans les variables d'environnement Vercel), puis rechargez la page.</p>
-    <p>Le guide complet se trouve dans <code>README.md</code>.</p></div>`;
+async function renderSetup(){
+  $("#app").innerHTML = `<div class="card" style="max-width:760px;margin:30px auto"><h1>Configuration requise</h1><div id="diag">Diagnostic en cours…</div></div>`;
+  const ok = v => `<span class="badge b-ok">✓ ${v}</span>`, ko = v => `<span class="badge b-danger">✗ ${v}</span>`;
+  let html;
+  try {
+    const r = await fetch("/api/config", { cache: "no-store" });
+    const txt = await r.text();
+    if (r.status === 404 || !/APP_CONFIG/.test(txt)) {
+      html = `<div class="alert danger"><b>La fonction <code>/api/config</code> est introuvable</b> (réponse HTTP ${r.status}).</div>
+        <p>Vérifiez que le dépôt GitHub contient bien le dossier <code>api</code> avec <code>config.js</code> et <code>notify.js</code>,
+        et que <b>Root Directory</b> est vide dans Vercel (Settings → Build and Deployment), puis redéployez.</p>`;
+    } else {
+      const has = k => new RegExp('"' + k + '":"[^"]+"').test(txt);
+      const url = has("SUPABASE_URL"), key = has("SUPABASE_ANON_KEY");
+      html = `<p>La fonction <code>/api/config</code> répond, mais Vercel ne lui transmet pas toutes les variables :</p>
+        <p>${url ? ok("SUPABASE_URL") : ko("SUPABASE_URL manquante")} ${key ? ok("SUPABASE_ANON_KEY") : ko("SUPABASE_ANON_KEY manquante")}</p>
+        <ol>
+          <li>Vercel → votre projet → <b>Settings → Environment Variables</b>.</li>
+          <li>Vérifiez l'orthographe exacte des noms (en MAJUSCULES, sans espace) et cochez <b>Production</b>, <b>Preview</b> et <b>Development</b>.</li>
+          <li>Important : une variable ajoutée ne s'applique qu'aux <b>nouveaux</b> déploiements →
+            <b>Deployments</b> → ⋯ sur le plus récent → <b>Redeploy</b>.</li>
+          <li>Rechargez cette page.</li>
+        </ol>`;
+    }
+  } catch(e){
+    html = `<p>Renseignez <code>SUPABASE_URL</code> et <code>SUPABASE_ANON_KEY</code> dans <code>config.js</code> (test sur PC)
+      ou dans les variables d'environnement Vercel, puis rechargez la page.</p>`;
+  }
+  $("#diag").innerHTML = html + `<p class="small muted">Guide complet : README.md</p>`;
 }
 
 async function afterLogin(){
