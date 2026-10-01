@@ -5,8 +5,10 @@
 //   { type: "maj",   demande_id, quoi }         -> email au demandeur (statut / finance / réception mis à jour)
 //
 // Variables d'environnement (Vercel > Settings > Environment Variables) :
-//   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY   (obligatoires)
-//   RESEND_API_KEY, EMAIL_FROM                                   (emails via https://resend.com)
+//   RESEND_API_KEY   (obligatoire – clé https://resend.com)
+//   EMAIL_FROM       (optionnel, défaut : "Achats <onboarding@resend.dev>")
+//   SUPABASE_URL, SUPABASE_ANON_KEY (optionnels si renseignés dans api/_public-config.js)
+//   SUPABASE_SERVICE_ROLE_KEY (optionnel)
 //   APP_URL       (ex : https://mon-app.vercel.app, pour le lien dans l'email)
 //   ADMIN_EMAILS  (optionnel : adresses supplémentaires, séparées par des virgules)
 // Sans RESEND_API_KEY, la fonction répond { email: false } : seules les notifications internes fonctionnent.
@@ -21,60 +23,59 @@ const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const money = (n, devise) => n == null ? "—" :
   new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n)) + " " + devise;
 
+// Valeurs publiques de secours (URL + clé anon), utilisées si les variables Vercel ne sont pas définies.
+let PUB = {};
+try { PUB = require("./_public-config.js"); } catch (e) { PUB = {}; }
+
 module.exports = async (req, res) => {
   const env = process.env;
+  const SUPABASE_URL = String(env.SUPABASE_URL || PUB.SUPABASE_URL || "").trim().replace(/\/(rest|auth)\/v1\/?$/, "").replace(/\/+$/, "");
+  const ANON = String(env.SUPABASE_ANON_KEY || PUB.SUPABASE_ANON_KEY || "").trim();
+  const SERVICE = String(env.SUPABASE_SERVICE_ROLE_KEY || "").trim();          // optionnelle
+  const RESEND = String(env.RESEND_API_KEY || "").trim();
+  const FROM = String(env.EMAIL_FROM || "").trim() || "Achats <onboarding@resend.dev>";
 
-  // Diagnostic : ouvrir /api/notify dans le navigateur indique quelles variables sont présentes (sans les valeurs).
+  // Diagnostic : ouvrir /api/notify dans le navigateur indique ce qui est configuré (sans afficher les clés).
   if (req.method === "GET") {
-    const v = k => !!(env[k] && String(env[k]).trim());
-    const vars = {
-      SUPABASE_URL: v("SUPABASE_URL"), SUPABASE_ANON_KEY: v("SUPABASE_ANON_KEY"),
-      SUPABASE_SERVICE_ROLE_KEY: v("SUPABASE_SERVICE_ROLE_KEY"),
-      RESEND_API_KEY: v("RESEND_API_KEY"), EMAIL_FROM: v("EMAIL_FROM"),
-      APP_URL: v("APP_URL"), ADMIN_EMAILS: v("ADMIN_EMAILS")
-    };
-    const manquantes = ["SUPABASE_URL","SUPABASE_ANON_KEY","SUPABASE_SERVICE_ROLE_KEY","RESEND_API_KEY","EMAIL_FROM"].filter(k => !vars[k]);
+    const manquantes = [];
+    if (!SUPABASE_URL) manquantes.push("SUPABASE_URL");
+    if (!ANON) manquantes.push("SUPABASE_ANON_KEY");
+    if (!RESEND) manquantes.push("RESEND_API_KEY");
     let resend = null;
-    if (vars.RESEND_API_KEY) {
+    if (RESEND) {
       try {
-        const r = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${env.RESEND_API_KEY.trim()}` } });
+        const r = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${RESEND}` } });
         const j = await r.json().catch(() => ({}));
         resend = r.ok ? { cle_valide: true, domaines: (j.data || []).map(d => `${d.name} (${d.status})`) }
-                      : { cle_valide: r.status !== 401 && r.status !== 403 ? null : false, statut_http: r.status, message: j.message };
+                      : { cle_valide: (r.status === 401 || r.status === 403) ? false : null, statut_http: r.status, message: j.message };
       } catch (e) { resend = { erreur: e.message }; }
     }
     return res.status(200).json({
       emails_actives: manquantes.length === 0,
       variables_manquantes: manquantes,
-      variables: vars,
-      email_from: vars.EMAIL_FROM ? env.EMAIL_FROM : null,
+      supabase: SUPABASE_URL || null,
+      email_from: FROM,
+      admin_emails_supplementaires: (env.ADMIN_EMAILS || "").split(",").map(x => x.trim()).filter(Boolean).length,
       resend
     });
   }
   if (req.method !== "POST") return res.status(405).json({ error: "Méthode non autorisée" });
 
-  const SUPABASE_URL = (env.SUPABASE_URL || "").trim().replace(/\/(rest|auth)\/v1\/?$/, "").replace(/\/+$/, "");
-  const SERVICE = (env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-  if (!SUPABASE_URL || !SERVICE || !env.SUPABASE_ANON_KEY) {
-    return res.status(200).json({ email: false, raison: "Variables Supabase manquantes sur le serveur" });
-  }
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
-    return res.status(200).json({ email: false, raison: "Envoi d'emails non configuré (RESEND_API_KEY / EMAIL_FROM)" });
-  }
+  if (!SUPABASE_URL || !ANON) return res.status(200).json({ email: false, raison: "Configuration Supabase absente côté serveur" });
+  if (!RESEND) return res.status(200).json({ email: false, raison: "Clé Resend absente : ajoutez la variable RESEND_API_KEY dans Vercel (Production) puis redéployez" });
 
   try {
     // 1. Identifier l'utilisateur à partir de son jeton de session
     const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
-    const ur = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { apikey: env.SUPABASE_ANON_KEY.trim(), Authorization: `Bearer ${token}` }
-    });
+    const ur = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: ANON, Authorization: `Bearer ${token}` } });
     if (!ur.ok) return res.status(401).json({ error: "Session invalide" });
     const user = await ur.json();
 
-    const db = async path => {
-      // Nouvelles clés Supabase (sb_secret_…) : en-tête apikey seul ; anciennes clés (JWT) : apikey + Authorization
-      const headers = SERVICE.startsWith("sb_") ? { apikey: SERVICE } : { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` };
-      const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers });
+    // Lecture de la base : avec la clé service_role si elle existe, sinon avec les droits de l'utilisateur (règles RLS)
+    const headers = SERVICE ? (SERVICE.startsWith("sb_") ? { apikey: SERVICE } : { apikey: SERVICE, Authorization: `Bearer ${SERVICE}` })
+                            : { apikey: ANON, Authorization: `Bearer ${token}` };
+    const db = async (path, init) => {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, Object.assign({ headers: Object.assign({ "Content-Type": "application/json" }, headers) }, init || {}));
       if (!r.ok) throw new Error("Lecture base : " + r.status + " " + (await r.text()));
       return r.json();
     };
@@ -100,8 +101,10 @@ module.exports = async (req, res) => {
       if (da.statut !== "en_attente" || !da.date_envoi || Date.now() - new Date(da.date_envoi).getTime() > 15 * 60 * 1000) {
         return res.status(409).json({ error: "Email d'envoi déjà traité ou demande non envoyée" });
       }
-      const admins = await db("profiles?role=eq.admin&actif=eq.true&select=email");
-      to = admins.map(a => a.email).concat((env.ADMIN_EMAILS || "").split(",")).map(s => (s || "").trim()).filter(Boolean);
+      let admins = [];
+      try { admins = await db("rpc/emails_admins", { method: "POST", body: "{}" }); }
+      catch (e) { if (!env.ADMIN_EMAILS) return res.status(200).json({ email: false, raison: "Fonction SQL emails_admins absente : exécutez le complément SQL dans Supabase" }); }
+      to = (admins || []).map(a => typeof a === "string" ? a : (a.emails_admins || a.email)).concat((env.ADMIN_EMAILS || "").split(",")).map(s => (s || "").trim()).filter(Boolean);
       subject = `Nouvelle demande d'achat ${da.numero} — ${da.demandeur_nom || ""}${da.urgence !== "Normal" ? " — " + da.urgence.toUpperCase() : ""}`;
       intro = `<p>Une nouvelle demande d'achat a été validée et envoyée par <b>${esc(da.demandeur_nom)}</b> (${esc(da.service)}).</p>`;
       const pdf = typeof body.pdf_base64 === "string" ? body.pdf_base64 : "";
@@ -148,8 +151,8 @@ module.exports = async (req, res) => {
 
     const r = await fetch(env.RESEND_API_URL || "https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${env.RESEND_API_KEY.trim()}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: env.EMAIL_FROM.trim(), to, subject, html, attachments })
+      headers: { Authorization: `Bearer ${RESEND}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: FROM, to, subject, html, attachments })
     });
     if (!r.ok) return res.status(502).json({ email: false, raison: "Resend : " + r.status + " " + (await r.text()) });
     return res.status(200).json({ email: true, destinataires: to.length });

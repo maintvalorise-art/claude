@@ -63,12 +63,17 @@ La sécurité est appliquée **dans la base de données** (Row Level Security), 
 
 ### Étape 2 – Emails (Resend, gratuit jusqu'à 3 000 emails par mois)
 
-1. Créez un compte sur <https://resend.com>, puis ouvrez **API Keys → Create API Key** et notez la clé (`RESEND_API_KEY`).
-2. Choisissez l'expéditeur :
-   - **Pour tester :** utilisez `EMAIL_FROM = Achats <onboarding@resend.dev>`. Resend n'envoie alors **qu'à l'adresse de votre compte Resend**.
-   - **Pour la production :** ouvrez **Domains → Add Domain**, ajoutez votre domaine (par ex. `valorise.ma`), créez les enregistrements DNS indiqués, puis utilisez `EMAIL_FROM = Achats <achats@valorise.ma>`.
+1. Créez un compte sur <https://resend.com>, puis **API Keys → Create API Key** : copiez la clé `re_…`.
+2. Dans Vercel → **Settings → Environment Variables**, ajoutez **une seule variable** :
+   `RESEND_API_KEY` = la clé (type *Secret*, environnements **Production + Preview**), puis **Redeploy**.
+3. Dans Supabase → **SQL Editor**, exécutez la section « 7. Emails » de `supabase/schema.sql` (fonction `emails_admins`).
+4. Vérifiez en ouvrant `https://votre-app.vercel.app/api/notify` : `"emails_actives": true`.
 
-Sans Resend, l'application fonctionne quand même : seules les notifications dans l'application (🔔) sont envoyées.
+Par défaut l'expéditeur est `Achats <onboarding@resend.dev>` : dans ce mode, Resend n'envoie **qu'à l'adresse du compte Resend**.
+Pour envoyer à tout le monde : Resend → **Domains → Add Domain** (ex. `valorise.ma`), ajoutez les enregistrements DNS,
+puis ajoutez la variable `EMAIL_FROM` = `Achats <achats@valorise.ma>` et redéployez.
+Variables optionnelles : `ADMIN_EMAILS` (destinataires supplémentaires), `APP_URL` (lien dans les emails).
+Les valeurs publiques Supabase utilisées par la fonction sont dans `api/_public-config.js` (ou variables `SUPABASE_URL` / `SUPABASE_ANON_KEY`).
 
 ### Étape 3 – Vercel (mise en ligne)
 

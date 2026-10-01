@@ -383,3 +383,16 @@ end $$;
 --
 --    update public.profiles set role = 'admin' where email = 'votre.email@exemple.com';
 -- ---------------------------------------------------------------------
+
+-- ---------------------------------------------------------------------
+-- 7. Emails : adresses des administrateurs (utilisée par api/notify.js)
+--    Accessible uniquement aux utilisateurs connectés et actifs.
+-- ---------------------------------------------------------------------
+create or replace function public.emails_admins() returns setof text
+language sql stable security definer set search_path = public as $$
+  select email from public.profiles
+   where role = 'admin' and actif and email is not null
+     and (public.is_actif() or auth.role() = 'service_role');
+$$;
+revoke execute on function public.emails_admins() from public, anon;
+grant execute on function public.emails_admins() to authenticated, service_role;
