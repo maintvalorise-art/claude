@@ -22,11 +22,39 @@ const money = (n, devise) => n == null ? "—" :
   new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n)) + " " + devise;
 
 module.exports = async (req, res) => {
+  const env = process.env;
+
+  // Diagnostic : ouvrir /api/notify dans le navigateur indique quelles variables sont présentes (sans les valeurs).
+  if (req.method === "GET") {
+    const v = k => !!(env[k] && String(env[k]).trim());
+    const vars = {
+      SUPABASE_URL: v("SUPABASE_URL"), SUPABASE_ANON_KEY: v("SUPABASE_ANON_KEY"),
+      SUPABASE_SERVICE_ROLE_KEY: v("SUPABASE_SERVICE_ROLE_KEY"),
+      RESEND_API_KEY: v("RESEND_API_KEY"), EMAIL_FROM: v("EMAIL_FROM"),
+      APP_URL: v("APP_URL"), ADMIN_EMAILS: v("ADMIN_EMAILS")
+    };
+    const manquantes = ["SUPABASE_URL","SUPABASE_ANON_KEY","SUPABASE_SERVICE_ROLE_KEY","RESEND_API_KEY","EMAIL_FROM"].filter(k => !vars[k]);
+    let resend = null;
+    if (vars.RESEND_API_KEY) {
+      try {
+        const r = await fetch("https://api.resend.com/domains", { headers: { Authorization: `Bearer ${env.RESEND_API_KEY.trim()}` } });
+        const j = await r.json().catch(() => ({}));
+        resend = r.ok ? { cle_valide: true, domaines: (j.data || []).map(d => `${d.name} (${d.status})`) }
+                      : { cle_valide: r.status !== 401 && r.status !== 403 ? null : false, statut_http: r.status, message: j.message };
+      } catch (e) { resend = { erreur: e.message }; }
+    }
+    return res.status(200).json({
+      emails_actives: manquantes.length === 0,
+      variables_manquantes: manquantes,
+      variables: vars,
+      email_from: vars.EMAIL_FROM ? env.EMAIL_FROM : null,
+      resend
+    });
+  }
   if (req.method !== "POST") return res.status(405).json({ error: "Méthode non autorisée" });
 
-  const env = process.env;
   const SUPABASE_URL = (env.SUPABASE_URL || "").trim().replace(/\/(rest|auth)\/v1\/?$/, "").replace(/\/+$/, "");
-  const SERVICE = env.SUPABASE_SERVICE_ROLE_KEY;
+  const SERVICE = (env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
   if (!SUPABASE_URL || !SERVICE || !env.SUPABASE_ANON_KEY) {
     return res.status(200).json({ email: false, raison: "Variables Supabase manquantes sur le serveur" });
   }
@@ -38,7 +66,7 @@ module.exports = async (req, res) => {
     // 1. Identifier l'utilisateur à partir de son jeton de session
     const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
     const ur = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { apikey: env.SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` }
+      headers: { apikey: env.SUPABASE_ANON_KEY.trim(), Authorization: `Bearer ${token}` }
     });
     if (!ur.ok) return res.status(401).json({ error: "Session invalide" });
     const user = await ur.json();
@@ -120,8 +148,8 @@ module.exports = async (req, res) => {
 
     const r = await fetch(env.RESEND_API_URL || "https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: env.EMAIL_FROM, to, subject, html, attachments })
+      headers: { Authorization: `Bearer ${env.RESEND_API_KEY.trim()}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ from: env.EMAIL_FROM.trim(), to, subject, html, attachments })
     });
     if (!r.ok) return res.status(502).json({ email: false, raison: "Resend : " + r.status + " " + (await r.text()) });
     return res.status(200).json({ email: true, destinataires: to.length });

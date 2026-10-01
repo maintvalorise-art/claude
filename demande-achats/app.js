@@ -746,8 +746,9 @@ async function notifyServer(payload){
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + (data.session ? data.session.access_token : "") },
       body: JSON.stringify(payload)
     });
-    if (!r.ok && r.status !== 200) return { email: false, raison: "HTTP " + r.status };
-    return await r.json();
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return { email: false, raison: j.raison || j.error || ("HTTP " + r.status) };
+    return j;
   } catch(e){ return { email: false, raison: e.message }; }
 }
 
@@ -763,6 +764,7 @@ async function envoyerDA(da){
   const res = await notifyServer({ type: "envoi", demande_id: updated.id, pdf_base64: pdfB64 });
   toast(res.email ? `Demande ${updated.numero} envoyée : PDF téléchargé, administration notifiée par email.`
                   : `Demande ${updated.numero} envoyée : PDF téléchargé, administration notifiée dans l'application.`);
+  if (!res.email) toast("Email non envoyé : " + (res.raison || res.error || "raison inconnue") + " (détails : /api/notify)", true);
   await reloadAll();
   location.hash = "#/da/" + updated.id;
   render();
@@ -871,6 +873,7 @@ const FORMS = {
     chk(await sb.from("demandes").update({ statut: d.statut, commentaire_admin: d.commentaire_admin }).eq("id", da.id).select().single());
     const res = await notifyServer({ type: "maj", demande_id: da.id, quoi: "statut" });
     toast(`Demande ${da.numero} : ${STATUTS[d.statut].l}. Demandeur notifié${res.email ? " (notification + email)" : ""}.`);
+    if (!res.email) toast("Email non envoyé : " + (res.raison || res.error || "raison inconnue") + " (détails : /api/notify)", true);
     await reloadAll(); render();
   },
   async adminFinance(form, d, _m, da){
