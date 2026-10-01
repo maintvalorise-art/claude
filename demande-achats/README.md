@@ -75,6 +75,7 @@ Sans Resend, l'application fonctionne quand même : seules les notifications dan
 1. Créez un compte sur <https://vercel.com> et connectez-le à GitHub.
 2. Cliquez sur **Add New → Project** et importez ce dépôt.
 3. **Root Directory** : `demande-achats`. **Framework Preset** : `Other`.
+   Dans **Build and Output Settings**, laissez **Build Command** et **Output Directory** vides (pas de build).
 4. Dans **Environment Variables**, ajoutez :
 
 | Variable | Valeur |
@@ -111,10 +112,10 @@ Les collaborateurs créent eux-mêmes leur compte : ils sont **Demandeurs** par 
 demande-achats/
 ├── index.html            Interface (styles inclus)
 ├── app.js                Logique : comptes, fiche, PDF, tableau de bord, notifications
-├── config.js             Configuration côté navigateur (générée par Vercel)
+├── config.js             Configuration pour un test sur PC (vide sur Vercel)
+├── api/config.js         Fonction Vercel : transmet SUPABASE_URL / ANON_KEY au navigateur
 ├── api/notify.js         Fonction Vercel : envoi des emails via Resend
 ├── supabase/schema.sql   Tables, règles de sécurité (RLS), historique, notifications
-├── scripts/gen-config.js Génère config.js à partir des variables Vercel
 └── vercel.json           Configuration du déploiement
 ```
 
