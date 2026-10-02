@@ -28,6 +28,7 @@ $instances = @()
 $services = Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq "MSSQLSERVER" -or $_.Name -like 'MSSQL$*' }
 foreach ($s in $services) {
     Log ("Service " + $s.Name + " : " + $s.Status)
+    if ($s.Status -ne "Running") { Log "  (instance arretee : ignoree)"; continue }
     if ($s.Name -eq "MSSQLSERVER") { $instances += "localhost" }
     else { $instances += ("localhost\" + $s.Name.Substring(6)) }
 }
