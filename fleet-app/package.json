@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
@@ -23,5 +23,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
