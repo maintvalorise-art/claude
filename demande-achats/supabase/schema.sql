@@ -396,3 +396,98 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke execute on function public.emails_admins() from public, anon;
 grant execute on function public.emails_admins() to authenticated, service_role;
+
+-- =====================================================================
+-- 8. Liaison Sage 100 (société, catalogue articles / fournisseurs, export)
+--    Bloc autonome : peut être exécuté seul sur une base déjà installée.
+-- =====================================================================
+alter table public.demandes add column if not exists societe          text;   -- code dossier Sage (ex : GES_VALORISE)
+alter table public.demandes add column if not exists sage_fournisseur text;   -- CT_Num du fournisseur Sage (choisi par l'admin)
+alter table public.demandes add column if not exists sage_statut      text not null default 'non_envoye';
+alter table public.demandes add column if not exists sage_piece       text;   -- n° de pièce Sage (DO_Piece) une fois importée
+alter table public.demandes add column if not exists sage_fichier     text;   -- fichier d'import généré par le connecteur
+alter table public.demandes add column if not exists sage_message     text;
+alter table public.demandes add column if not exists sage_le          timestamptz;
+alter table public.demandes drop constraint if exists demandes_sage_statut_check;
+alter table public.demandes add constraint demandes_sage_statut_check
+  check (sage_statut in ('non_envoye','a_exporter','fichier_pret','importe','erreur'));
+
+-- Catalogue Sage (rempli par le connecteur installé sur le serveur Sage)
+create table if not exists public.sage_articles (
+  societe     text not null,
+  ar_ref      text not null,
+  ar_design   text,
+  prix_achat  numeric,
+  synced_at   timestamptz not null default now(),
+  primary key (societe, ar_ref)
+);
+create table if not exists public.sage_fournisseurs (
+  societe     text not null,
+  ct_num      text not null,
+  ct_intitule text,
+  synced_at   timestamptz not null default now(),
+  primary key (societe, ct_num)
+);
+alter table public.sage_articles     enable row level security;
+alter table public.sage_fournisseurs enable row level security;
+drop policy if exists sage_articles_select on public.sage_articles;
+drop policy if exists sage_fournisseurs_select on public.sage_fournisseurs;
+create policy sage_articles_select     on public.sage_articles     for select to authenticated using (public.is_actif());
+create policy sage_fournisseurs_select on public.sage_fournisseurs for select to authenticated using (public.is_actif());
+grant select on public.sage_articles, public.sage_fournisseurs to authenticated;
+grant all    on public.sage_articles, public.sage_fournisseurs to service_role;
+
+-- Protection : le demandeur choisit la société, mais seuls l'admin et le connecteur gèrent les champs Sage
+create or replace function public.demandes_sage_guard() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    if tg_op = 'INSERT' then
+      new.sage_fournisseur := null; new.sage_statut := 'non_envoye'; new.sage_piece := null;
+      new.sage_fichier := null; new.sage_message := null; new.sage_le := null;
+    else
+      new.sage_fournisseur := old.sage_fournisseur; new.sage_statut := old.sage_statut; new.sage_piece := old.sage_piece;
+      new.sage_fichier := old.sage_fichier; new.sage_message := old.sage_message; new.sage_le := old.sage_le;
+    end if;
+  end if;
+  if new.statut = 'en_attente' and (tg_op = 'INSERT' or old.statut = 'brouillon') and coalesce(new.societe, '') = '' then
+    raise exception 'Choisissez la société avant d''envoyer la demande.';
+  end if;
+  if tg_op = 'UPDATE' and new.sage_statut = 'a_exporter' and old.sage_statut is distinct from 'a_exporter' then
+    if new.statut <> 'validee' then raise exception 'Seule une demande validée peut être envoyée vers Sage.'; end if;
+    if coalesce(new.societe, '') = '' then raise exception 'Société non renseignée.'; end if;
+    if coalesce(new.sage_fournisseur, '') = '' then raise exception 'Choisissez le fournisseur Sage.'; end if;
+    if exists (select 1 from jsonb_array_elements(new.lignes) l where coalesce(l->>'ar_ref', '') = '') then
+      raise exception 'Chaque ligne doit avoir un article Sage.';
+    end if;
+    new.sage_message := null; new.sage_le := now();
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_demandes_sage_guard on public.demandes;
+create trigger trg_demandes_sage_guard
+  before insert or update on public.demandes
+  for each row execute function public.demandes_sage_guard();
+
+-- Historique + notification quand la DA est enregistrée dans Sage
+create or replace function public.demandes_sage_after() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.sage_statut is distinct from old.sage_statut then
+    insert into public.suivi(demande_id, auteur_nom, type, ancien, nouveau, commentaire)
+    values (new.id, coalesce((select nom from public.profiles where id = auth.uid()), 'Connecteur Sage'), 'sage',
+            old.sage_statut, new.sage_statut,
+            case when new.sage_statut = 'importe' then 'Pièce Sage ' || coalesce(new.sage_piece, '') else new.sage_message end);
+    if new.sage_statut = 'importe' then
+      insert into public.notifications(user_id, demande_id, titre, message)
+      values (new.user_id, new.id, new.numero || ' : enregistrée dans Sage', 'Pièce Sage ' || coalesce(new.sage_piece, ''));
+    end if;
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_demandes_sage_after on public.demandes;
+create trigger trg_demandes_sage_after
+  after update on public.demandes
+  for each row execute function public.demandes_sage_after();

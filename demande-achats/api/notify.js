@@ -135,6 +135,7 @@ module.exports = async (req, res) => {
       ${intro}
       <table style="border-collapse:collapse;margin:8px 0">
         <tr><td style="padding:3px 12px 3px 0;color:#66727f">N° DA</td><td><b>${esc(da.numero)}</b></td></tr>
+        ${da.societe ? `<tr><td style="padding:3px 12px 3px 0;color:#66727f">Société</td><td>${esc(da.societe)}</td></tr>` : ""}
         <tr><td style="padding:3px 12px 3px 0;color:#66727f">Statut</td><td>${esc(label(da.statut))}</td></tr>
         <tr><td style="padding:3px 12px 3px 0;color:#66727f">Validation finance</td><td>${esc(label(da.finance_statut))}</td></tr>
         <tr><td style="padding:3px 12px 3px 0;color:#66727f">Réception</td><td>${esc(label(da.reception_statut))}</td></tr>

@@ -5,7 +5,9 @@
    ===================================================================== */
 
 const CFG = Object.assign({
-  SUPABASE_URL: "", SUPABASE_ANON_KEY: "", ENTREPRISE: "Mon entreprise", DEVISE: "MAD", NOTIFY_URL: "/api/notify"
+  SUPABASE_URL: "", SUPABASE_ANON_KEY: "", ENTREPRISE: "Mon entreprise", DEVISE: "MAD", NOTIFY_URL: "/api/notify",
+  // Sociétés = dossiers Sage 100 (code = nom de la base SQL du dossier)
+  SOCIETES: [{ code: "GES_VALORISE", nom: "VALORISE" }, { code: "GES_ECO", nom: "ECO" }]
 }, window.APP_CONFIG || {});
 // Tolère une URL copiée avec /rest/v1/ ou / final, et des espaces autour des valeurs
 CFG.SUPABASE_URL = String(CFG.SUPABASE_URL || "").trim().replace(/\/(rest|auth)\/v1\/?$/, "").replace(/\/+$/, "");
@@ -37,6 +39,14 @@ const RECEPTION = {
   non_conforme: { l: "Non conforme",  c: "b-danger" }
 };
 const ADMIN_STATUTS = ["en_attente","en_cours","validee","refusee"];
+const SAGE = {
+  non_envoye:   { l: "Non envoyée",                    c: "b-grey" },
+  a_exporter:   { l: "En attente du connecteur",       c: "b-warn" },
+  fichier_pret: { l: "Fichier prêt : à importer dans Sage", c: "b-violet" },
+  importe:      { l: "Enregistrée dans Sage",          c: "b-ok" },
+  erreur:       { l: "Erreur Sage",                    c: "b-danger" }
+};
+const societeNom = code => ((CFG.SOCIETES || []).find(x => x.code === code) || {}).nom || code || "—";
 
 /* ---------------- Utilitaires ---------------- */
 const $ = s => document.querySelector(s);
@@ -169,6 +179,41 @@ async function reloadAll(){
   renderBell();
 }
 const findDA = id => DA.find(d => d.id === id);
+
+/* ---------------- Catalogue Sage (articles / fournisseurs synchronisés par le connecteur) ---------------- */
+const CATALOG = {};
+async function fetchAllRows(table, societe, cols, order){
+  let out = [], from = 0;
+  for (;;){
+    const { data, error } = await sb.from(table).select(cols).eq("societe", societe).order(order).range(from, from + 999);
+    if (error) throw error;
+    out = out.concat(data || []);
+    if (!data || data.length < 1000) break;
+    from += 1000;
+  }
+  return out;
+}
+async function loadCatalog(societe){
+  if (!societe) return { articles: [], fournisseurs: [], art: new Map(), four: new Map(), ok: false };
+  if (CATALOG[societe]) return CATALOG[societe];
+  let articles = [], fournisseurs = [], ok = true;
+  try {
+    [articles, fournisseurs] = await Promise.all([
+      fetchAllRows("sage_articles", societe, "ar_ref,ar_design,prix_achat", "ar_ref"),
+      fetchAllRows("sage_fournisseurs", societe, "ct_num,ct_intitule", "ct_intitule")
+    ]);
+  } catch(e){ ok = false; console.warn("Catalogue Sage indisponible", e); }
+  CATALOG[societe] = { articles, fournisseurs, ok,
+    art: new Map(articles.map(a => [a.ar_ref.toUpperCase(), a])),
+    four: new Map(fournisseurs.map(f => [f.ct_num.toUpperCase(), f])) };
+  return CATALOG[societe];
+}
+function datalistArticles(cat){
+  return cat.articles.map(a => `<option value="${esc(a.ar_ref)}">${esc(a.ar_design)}</option>`).join("");
+}
+function datalistFournisseurs(cat){
+  return cat.fournisseurs.map(f => `<option value="${esc(f.ct_num)}">${esc(f.ct_intitule)}</option>`).join("");
+}
 
 /* ---------------- Notifications (temps réel + relève périodique) ---------------- */
 function startLive(){
@@ -313,10 +358,10 @@ function viewMesDemandes(){
   </div>
   <div class="card">
     ${mine.length ? `<div class="table-wrap"><table><thead><tr>
-      <th>N° DA</th><th>Date</th><th>Objet</th><th class="num">Montant estimé</th><th>Urgence</th><th>Statut</th><th>Finance</th><th>Réception</th><th>Commentaire admin</th>
+      <th>N° DA</th><th>Société</th><th>Date</th><th>Objet</th><th class="num">Montant estimé</th><th>Urgence</th><th>Statut</th><th>Finance</th><th>Réception</th><th>Commentaire admin</th>
     </tr></thead><tbody>
     ${mine.map(d => `<tr class="click" data-go="#/da/${d.id}">
-      <td><b>${esc(d.numero)}</b></td><td>${fmtDate(d.date_envoi || d.created_at)}</td><td>${objet(d)}</td>
+      <td><b>${esc(d.numero)}</b></td><td>${esc(societeNom(d.societe))}</td><td>${fmtDate(d.date_envoi || d.created_at)}</td><td>${objet(d)}</td>
       <td class="num">${money(d.montant_estime)}</td><td>${urgBadge(d.urgence)}</td><td>${badge(d.statut)}</td>
       <td>${d.statut === "brouillon" ? "—" : badgeOf(FINANCE, d.finance_statut)}</td>
       <td>${d.statut === "brouillon" ? "—" : badgeOf(RECEPTION, d.reception_statut)}</td>
@@ -328,7 +373,8 @@ function viewMesDemandes(){
 function ligneRow(l){
   l = l || { unite: "Pce", quantite: 1 };
   return `<tr>
-    <td><input name="designation" required value="${esc(l.designation)}" placeholder="Produit / service"></td>
+    <td style="min-width:150px"><input name="ar_ref" class="ar-ref" list="dl-articles" value="${esc(l.ar_ref)}" placeholder="Article Sage" autocomplete="off"></td>
+    <td style="min-width:200px"><input name="designation" required value="${esc(l.designation)}" placeholder="Produit / service"></td>
     <td><input name="reference" value="${esc(l.reference)}" placeholder="Réf. constructeur"></td>
     <td style="width:90px"><input name="quantite" type="number" min="0.001" step="any" required value="${esc(l.quantite)}"></td>
     <td style="width:110px"><select name="unite">${opts(UNITES, l.unite)}</select></td>
@@ -343,6 +389,16 @@ function viewForm(da){
   return `
   <h1>${da ? "Modifier la demande " + esc(da.numero) : "Fiche de demande d'achat"}</h1>
   <form data-form="saveDA" data-id="${da ? da.id : ""}" novalidate>
+  <div class="card action">
+    <h2>Société</h2>
+    <div class="grid g3">
+      <div><label class="req">Société (dossier Sage)</label>
+        <select name="societe" id="societe" required>
+          <option value="">— Choisir la société —</option>
+          ${(CFG.SOCIETES || []).map(x => `<option value="${esc(x.code)}" ${x.code === d.societe ? "selected" : ""}>${esc(x.nom)}</option>`).join("")}
+        </select></div>
+    </div>
+  </div>
   <div class="card">
     <h2>1. Demandeur et besoin</h2>
     <div class="grid g3">
@@ -362,8 +418,10 @@ function viewForm(da){
   <div class="card">
     <h2>2. Articles demandés</h2>
     <div class="table-wrap"><table class="lines"><thead><tr>
-      <th>Désignation *</th><th>Référence</th><th>Quantité *</th><th>Unité</th><th>Prix unit. estimé</th><th class="num">Total estimé</th><th></th>
+      <th>Article Sage</th><th>Désignation *</th><th>Réf. constructeur</th><th>Quantité *</th><th>Unité</th><th>Prix unit. estimé</th><th class="num">Total estimé</th><th></th>
     </tr></thead><tbody id="lignes">${lignes.map(ligneRow).join("")}</tbody></table></div>
+    <datalist id="dl-articles"></datalist>
+    <div class="small muted" id="catalog-info" style="margin-top:6px"></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap;gap:8px">
       <button type="button" class="btn sm" data-act="ajoutLigne">+ Ajouter un article</button>
       <div>Total estimé : <b id="total-estime">—</b></div>
@@ -407,11 +465,11 @@ async function loadSuivi(id){
 function field(label, v){ return `<div><dt>${esc(label)}</dt><dd>${v === null || v === undefined || v === "" ? "—" : v}</dd></div>`; }
 const SUIVI_TXT = {
   creation: "Demande créée", envoi: "Validée et envoyée à l'administration",
-  statut: "Statut", commentaire: "Commentaire de l'administration", finance: "Validation finance", reception: "Réception"
+  statut: "Statut", commentaire: "Commentaire de l'administration", finance: "Validation finance", reception: "Réception", sage: "Sage"
 };
 function suiviLabel(s){
-  const map = s.type === "finance" ? FINANCE : s.type === "reception" ? RECEPTION : STATUTS;
-  if (["statut","finance","reception"].includes(s.type)) return `${SUIVI_TXT[s.type]} : ${badgeOf(map, s.nouveau)}`;
+  const map = s.type === "finance" ? FINANCE : s.type === "reception" ? RECEPTION : s.type === "sage" ? SAGE : STATUTS;
+  if (["statut","finance","reception","sage"].includes(s.type)) return `${SUIVI_TXT[s.type]} : ${badgeOf(map, s.nouveau)}`;
   return esc(SUIVI_TXT[s.type] || s.type);
 }
 
@@ -427,7 +485,7 @@ async function viewDetail(da){
     ${badge(da.statut)} ${urgBadge(da.urgence)}
     <button class="btn sm" data-act="pdf" data-id="${da.id}">⬇ Télécharger le PDF</button>
   </div>
-  <p class="muted small" style="margin-top:0">Par ${esc(da.demandeur_nom)} · ${esc(da.service)} · créée le ${fmtDate(da.created_at)}${da.date_envoi ? " · envoyée le " + fmtDT(da.date_envoi) : ""}</p>
+  <p class="muted small" style="margin-top:0"><b>${esc(societeNom(da.societe))}</b> · Par ${esc(da.demandeur_nom)} · ${esc(da.service)} · créée le ${fmtDate(da.created_at)}${da.date_envoi ? " · envoyée le " + fmtDT(da.date_envoi) : ""}</p>
   ${da.urgence !== "Normal" ? `<div class="urgent-banner">${esc(da.urgence.toUpperCase())} – IMPACT ${esc((da.impact || "NON PRÉCISÉ").toUpperCase())}</div>` : ""}
 
   ${mine && da.statut === "brouillon" ? `<div class="card action">
@@ -440,22 +498,23 @@ async function viewDetail(da){
 
   ${envoyee ? `<div class="card">
     <h2>Suivi de la demande</h2>
-    <div class="track">
+    <div class="track t4">
       <div><div class="t">Statut de la demande</div>${badge(da.statut)}<div class="small muted" style="margin-top:4px">${da.traite_par ? "Par " + esc(da.traite_par) + " · " + fmtDT(da.traite_le) : "En attente de traitement"}</div></div>
       <div><div class="t">Validation finance</div>${badgeOf(FINANCE, da.finance_statut)}<div class="small muted" style="margin-top:4px">${da.finance_par ? "Par " + esc(da.finance_par) + " · " + fmtDT(da.finance_le) : ""}</div>
         ${da.finance_commentaire ? `<div class="small" style="margin-top:4px">${esc(da.finance_commentaire)}</div>` : ""}</div>
       <div><div class="t">Réception</div>${badgeOf(RECEPTION, da.reception_statut)}<div class="small muted" style="margin-top:4px">${da.reception_date ? "Le " + fmtDate(da.reception_date) : ""}${da.bc_numero ? " · BC " + esc(da.bc_numero) : ""}</div>
         ${da.reception_remarque ? `<div class="small" style="margin-top:4px">${esc(da.reception_remarque)}</div>` : ""}</div>
+      <div><div class="t">Sage</div>${badgeOf(SAGE, da.sage_statut || "non_envoye")}<div class="small muted" style="margin-top:4px">${da.sage_piece ? "Pièce Sage <b>" + esc(da.sage_piece) + "</b>" : ""}</div></div>
     </div>
     ${da.commentaire_admin ? `<div class="comment ${da.statut === "refusee" ? "refus" : ""}"><b>Commentaire de l'administration :</b>\n${esc(da.commentaire_admin)}</div>` : ""}
   </div>` : ""}
 
-  ${isAdmin() && envoyee ? viewAdminPanels(da) : ""}
+  ${isAdmin() && envoyee ? viewAdminPanels(da) + await viewSagePanel(da) : ""}
 
   <div class="card info">
     <h2>Fiche de demande</h2>
     <dl>
-      ${field("Demandeur", esc(da.demandeur_nom))}${field("Service", esc(da.service))}${field("Centre de coût", esc(da.centre_cout))}
+      ${field("Société", esc(societeNom(da.societe)))}${field("Demandeur", esc(da.demandeur_nom))}${field("Service", esc(da.service))}${field("Centre de coût", esc(da.centre_cout))}
       ${field("Catégorie", esc(da.categorie))}${field("Date souhaitée", fmtDate(da.date_souhaitee))}${field("Fournisseur suggéré", esc(da.fournisseur_suggere))}
       ${da.categorie === "Pièces de rechange" ? field("Marque", esc(da.marque)) + field("Modèle machine / véhicule", esc(da.modele)) : ""}
       ${field("Stock vérifié", da.stock_verifie ? "Oui" : "Non")}${field("Commandes en cours vérifiées", da.commandes_verifiees ? "Oui" : "Non")}
@@ -463,10 +522,10 @@ async function viewDetail(da){
       ${da.pieces_jointes ? `<div style="grid-column:1/-1"><dt>Pièces jointes</dt><dd style="white-space:pre-wrap">${linkify(da.pieces_jointes)}</dd></div>` : ""}
     </dl>
     <h3>Articles</h3>
-    <div class="table-wrap"><table><thead><tr><th>#</th><th>Désignation</th><th>Référence</th><th class="num">Qté</th><th>Unité</th><th class="num">PU estimé</th><th class="num">Total estimé</th></tr></thead><tbody>
-      ${lignes.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.designation)}</td><td>${esc(l.reference)}</td><td class="num">${esc(l.quantite)}</td><td>${esc(l.unite)}</td>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Article Sage</th><th>Désignation</th><th>Réf. constructeur</th><th class="num">Qté</th><th>Unité</th><th class="num">PU estimé</th><th class="num">Total estimé</th></tr></thead><tbody>
+      ${lignes.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.ar_ref || "—")}</td><td>${esc(l.designation)}</td><td>${esc(l.reference)}</td><td class="num">${esc(l.quantite)}</td><td>${esc(l.unite)}</td>
         <td class="num">${l.prix_unitaire ? money(l.prix_unitaire) : "—"}</td><td class="num">${l.prix_unitaire ? money(num(l.quantite) * num(l.prix_unitaire)) : "—"}</td></tr>`).join("")}
-      <tr><td colspan="6" class="num"><b>Total estimé</b></td><td class="num"><b>${money(da.montant_estime)}</b></td></tr>
+      <tr><td colspan="7" class="num"><b>Total estimé</b></td><td class="num"><b>${money(da.montant_estime)}</b></td></tr>
     </tbody></table></div>
   </div>
 
@@ -515,6 +574,42 @@ function viewAdminPanels(da){
   </div><div style="height:14px"></div>`;
 }
 
+async function viewSagePanel(da){
+  const st = da.sage_statut || "non_envoye";
+  const lignes = da.lignes || [];
+  const info = `<div class="small" style="margin-top:8px">
+      ${da.sage_piece ? `Pièce Sage : <b>${esc(da.sage_piece)}</b><br>` : ""}
+      ${da.sage_fichier ? `Fichier d'import : <code>${esc(da.sage_fichier)}</code><br>` : ""}
+      ${da.sage_message ? `<span style="color:var(--danger)">${esc(da.sage_message)}</span><br>` : ""}
+      ${da.sage_le ? `<span class="muted">Mis à jour le ${fmtDT(da.sage_le)}</span>` : ""}</div>`;
+  if (st === "importe" || st === "a_exporter") return `<div class="card"><h2>Sage 100 — ${esc(societeNom(da.societe))}</h2>${badgeOf(SAGE, st)}
+      ${st === "a_exporter" ? `<p class="small muted">Le connecteur installé sur le serveur Sage va générer le fichier d'import (vérification toutes les quelques minutes).</p>` : ""}${info}</div>`;
+  if (da.statut !== "validee") return `<div class="card"><h2>Sage 100</h2><p class="muted small">L'envoi vers Sage est possible une fois la demande <b>validée</b>.</p></div>`;
+  if (!da.societe) return `<div class="card"><h2>Sage 100</h2><div class="alert warn">Société non renseignée sur cette demande.</div></div>`;
+  const cat = await loadCatalog(da.societe);
+  const vide = !cat.articles.length;
+  return `
+  <form class="card action" data-form="adminSage" data-id="${da.id}">
+    <h2>Sage 100 — ${esc(societeNom(da.societe))} <span style="font-weight:400">${badgeOf(SAGE, st)}</span></h2>
+    ${vide ? `<div class="alert warn">Le catalogue Sage de cette société n'est pas encore synchronisé : vérifiez que le connecteur tourne sur le serveur Sage.</div>` : ""}
+    ${st === "fichier_pret" ? `<div class="alert info">Le fichier est prêt : importez-le dans Sage (Fichier → Import → format « DA_APP »). La pièce Sage apparaîtra ici automatiquement.</div>` : ""}
+    <div class="grid g2">
+      <div><label class="req">Fournisseur Sage (CT_Num)</label>
+        <input name="sage_fournisseur" list="dl-fournisseurs" autocomplete="off" required value="${esc(da.sage_fournisseur || "")}" placeholder="Code fournisseur Sage">
+        <datalist id="dl-fournisseurs">${datalistFournisseurs(cat)}</datalist>
+        ${da.fournisseur_suggere ? `<div class="small muted">Suggéré par le demandeur : ${esc(da.fournisseur_suggere)}</div>` : ""}</div>
+    </div>
+    <h3>Articles Sage</h3>
+    <div class="table-wrap"><table class="lines"><thead><tr><th>#</th><th>Désignation</th><th class="num">Qté</th><th>Article Sage *</th></tr></thead><tbody>
+      ${lignes.map((l, i) => `<tr><td>${i + 1}</td><td>${esc(l.designation)}</td><td class="num">${esc(l.quantite)} ${esc(l.unite)}</td>
+        <td><input class="sage-ligne" data-idx="${i}" list="dl-articles" autocomplete="off" value="${esc(l.ar_ref || "")}" placeholder="Réf. article Sage"></td></tr>`).join("")}
+    </tbody></table></div>
+    <datalist id="dl-articles">${datalistArticles(cat)}</datalist>
+    <div class="btns"><button class="btn primary" type="submit">${st === "non_envoye" ? "Préparer l'import Sage" : "Regénérer le fichier d'import"}</button></div>
+    ${info}
+  </form>`;
+}
+
 function viewAdminDashboard(){
   const env = DA.filter(d => d.statut !== "brouillon");
   const c = s => env.filter(d => d.statut === s).length;
@@ -544,6 +639,13 @@ function viewAdminDashboard(){
     ${kpi(recOk, "Réceptions terminées", "#/demandes?reception=recue")}
     ${kpi(money(montantValide), "Montant des DA validées")}
   </div>
+  <div class="grid g5" style="margin-bottom:14px">
+    ${kpi(env.filter(d => d.statut === "validee" && (d.sage_statut || "non_envoye") === "non_envoye").length, "Validées, pas encore envoyées vers Sage", "#/demandes?statut=validee&sage=non_envoye")}
+    ${kpi(env.filter(d => d.sage_statut === "fichier_pret").length, "Sage : fichiers à importer", "#/demandes?sage=fichier_pret", env.some(d => d.sage_statut === "fichier_pret"))}
+    ${kpi(env.filter(d => d.sage_statut === "importe").length, "Enregistrées dans Sage", "#/demandes?sage=importe")}
+    ${kpi(env.filter(d => d.sage_statut === "erreur").length, "Sage : erreurs", "#/demandes?sage=erreur")}
+    ${(CFG.SOCIETES || []).map(x => kpi(env.filter(d => d.societe === x.code).length, "DA " + x.nom, "#/demandes?societe=" + encodeURIComponent(x.code))).join("")}
+  </div>
   <div class="card"><h2>À traiter (${aTraiter.length})</h2>${tableAdmin(aTraiter, "Aucune demande en attente. 👍")}</div>
   <div class="grid g2">
     <div class="card"><h2>Validées en attente de réception (${attRecep.length})</h2>${tableAdmin(attRecep, "Rien en attente de réception.", true)}</div>
@@ -558,25 +660,28 @@ function viewAdminDashboard(){
 function tableAdmin(list, emptyMsg, compact){
   if (!list.length) return `<div class="empty">${esc(emptyMsg)}</div>`;
   return `<div class="table-wrap"><table><thead><tr>
-    <th>N° DA</th><th>Envoyée le</th><th>Demandeur</th>${compact ? "" : "<th>Service</th>"}<th>Objet</th><th class="num">Montant estimé</th><th>Urgence</th><th>Statut</th><th>Finance</th><th>Réception</th>
+    <th>N° DA</th><th>Société</th><th>Envoyée le</th><th>Demandeur</th>${compact ? "" : "<th>Service</th>"}<th>Objet</th><th class="num">Montant estimé</th><th>Urgence</th><th>Statut</th><th>Finance</th><th>Réception</th><th>Sage</th>
   </tr></thead><tbody>
   ${list.map(d => `<tr class="click" data-go="#/da/${d.id}">
-    <td><b>${esc(d.numero)}</b></td><td>${fmtDate(d.date_envoi)}</td><td>${esc(d.demandeur_nom)}</td>${compact ? "" : `<td>${esc(d.service)}</td>`}
+    <td><b>${esc(d.numero)}</b></td><td>${esc(societeNom(d.societe))}</td><td>${fmtDate(d.date_envoi)}</td><td>${esc(d.demandeur_nom)}</td>${compact ? "" : `<td>${esc(d.service)}</td>`}
     <td>${objet(d)}</td><td class="num">${money(d.montant_estime)}</td><td>${urgBadge(d.urgence)}</td><td>${badge(d.statut)}</td>
-    <td>${badgeOf(FINANCE, d.finance_statut)}</td><td>${badgeOf(RECEPTION, d.reception_statut)}</td></tr>`).join("")}
+    <td>${badgeOf(FINANCE, d.finance_statut)}</td><td>${badgeOf(RECEPTION, d.reception_statut)}</td>
+    <td>${d.sage_piece ? `<span class="badge b-ok">${esc(d.sage_piece)}</span>` : badgeOf(SAGE, d.sage_statut || "non_envoye")}</td></tr>`).join("")}
   </tbody></table></div>`;
 }
 
-let filters = { q: "", statut: "", finance: "", reception: "", service: "" };
+let filters = { q: "", statut: "", finance: "", reception: "", service: "", societe: "", sage: "" };
 function viewAdminListe(params){
-  if (Object.keys(params).length) filters = Object.assign({ q: "", statut: "", finance: "", reception: "", service: "" }, params);
+  if (Object.keys(params).length) filters = Object.assign({ q: "", statut: "", finance: "", reception: "", service: "", societe: "", sage: "" }, params);
   const q = filters.q.toLowerCase();
   const list = DA.filter(d => d.statut !== "brouillon" &&
     (!filters.statut || d.statut === filters.statut) &&
     (!filters.finance || d.finance_statut === filters.finance) &&
     (!filters.reception || d.reception_statut === filters.reception) &&
     (!filters.service || d.service === filters.service) &&
-    (!q || [d.numero, d.demandeur_nom, d.motif, d.bc_numero, d.fournisseur_retenu, ...(d.lignes || []).map(l => l.designation + " " + (l.reference || ""))].join(" ").toLowerCase().includes(q)));
+    (!filters.societe || d.societe === filters.societe) &&
+    (!filters.sage || (d.sage_statut || "non_envoye") === filters.sage) &&
+    (!q || [d.numero, d.demandeur_nom, d.motif, d.bc_numero, d.fournisseur_retenu, ...d.sage_piece, d.sage_fournisseur, ...(d.lignes || []).map(l => l.designation + " " + (l.reference || "") + " " + (l.ar_ref || ""))].join(" ").toLowerCase().includes(q)));
   const sel = (id, map, keys, v, all) => `<select id="${id}"><option value="">${all}</option>${keys.map(k => `<option value="${k}" ${k === v ? "selected" : ""}>${esc(map[k].l)}</option>`).join("")}</select>`;
   return `
   <h1>Toutes les demandes</h1>
@@ -587,6 +692,8 @@ function viewAdminListe(params){
       ${sel("f-finance", FINANCE, Object.keys(FINANCE), filters.finance, "Finance : tout")}
       ${sel("f-reception", RECEPTION, Object.keys(RECEPTION), filters.reception, "Réception : tout")}
       <select id="f-service">${opts(SERVICES, filters.service, "Tous services")}</select>
+      <select id="f-societe"><option value="">Toutes sociétés</option>${(CFG.SOCIETES || []).map(x => `<option value="${esc(x.code)}" ${x.code === filters.societe ? "selected" : ""}>${esc(x.nom)}</option>`).join("")}</select>
+      ${sel("f-sage", SAGE, Object.keys(SAGE), filters.sage, "Sage : tout")}
       <button class="btn" data-act="exportCSV">Export CSV</button>
     </div>
     <div class="small muted" style="margin-bottom:8px">${list.length} demande(s)</div>
@@ -635,14 +742,41 @@ function bindView(){
   if (cat) cat.onchange = () => { $("#bloc-pdr").hidden = cat.value !== "Pièces de rechange"; };
   if (urg) urg.onchange = () => { $("#bloc-impact").hidden = urg.value === "Normal"; };
   if ($("#lignes")){ $("#lignes").oninput = updateTotals; updateTotals(); }
+  const soc = $("#societe");
+  if (soc && $("#dl-articles")){
+    const refresh = async () => {
+      const info = $("#catalog-info"), dl = $("#dl-articles");
+      if (!soc.value){ dl.innerHTML = ""; info.textContent = "Choisissez d'abord la société pour afficher les articles Sage."; return; }
+      info.textContent = "Chargement du catalogue Sage…";
+      const cat = await loadCatalog(soc.value);
+      if (!$("#dl-articles")) return;
+      dl.innerHTML = datalistArticles(cat);
+      info.textContent = cat.articles.length
+        ? `${cat.articles.length} articles Sage disponibles pour ${societeNom(soc.value)} : tapez une référence ou un mot de la désignation.`
+        : "Catalogue Sage non synchronisé pour cette société : saisissez la désignation, l'administration complétera l'article Sage.";
+    };
+    soc.onchange = refresh; refresh();
+    $("#lignes").addEventListener("change", async e => {
+      const inp = e.target.closest(".ar-ref"); if (!inp || !soc.value) return;
+      const cat = await loadCatalog(soc.value);
+      const a = cat.art.get(inp.value.trim().toUpperCase());
+      if (!a) return;
+      inp.value = a.ar_ref;
+      const tr = inp.closest("tr");
+      const des = tr.querySelector("[name=designation]"), pu = tr.querySelector("[name=prix_unitaire]");
+      if (!des.value || des.dataset.auto === "1"){ des.value = a.ar_design || ""; des.dataset.auto = "1"; }
+      if (!pu.value && num(a.prix_achat) > 0) pu.value = num(a.prix_achat);
+      updateTotals();
+    });
+  }
   const fq = $("#f-q");
   if (fq){
     const upd = () => {
-      filters = { q: $("#f-q").value, statut: $("#f-statut").value, finance: $("#f-finance").value, reception: $("#f-reception").value, service: $("#f-service").value };
+      filters = { q: $("#f-q").value, statut: $("#f-statut").value, finance: $("#f-finance").value, reception: $("#f-reception").value, service: $("#f-service").value, societe: $("#f-societe").value, sage: $("#f-sage").value };
       history.replaceState(null, "", "#/demandes");
       const pos = fq.selectionStart; render().then(() => { const n = $("#f-q"); n.focus(); n.setSelectionRange(pos, pos); });
     };
-    fq.oninput = upd; ["#f-statut","#f-finance","#f-reception","#f-service"].forEach(s => $(s).onchange = upd);
+    fq.oninput = upd; ["#f-statut","#f-finance","#f-reception","#f-service","#f-societe","#f-sage"].forEach(s => $(s).onchange = upd);
   }
 }
 
@@ -673,10 +807,10 @@ function makePDF(da){
   }
   const y0 = da.urgence && da.urgence !== "Normal" ? 51 : 41;
   const pairs = [
-    ["Demandeur", da.demandeur_nom], ["Service", da.service],
+    ["Société", societeNom(da.societe)], ["Demandeur", da.demandeur_nom], ["Service", da.service],
     ["Centre de coût", da.centre_cout], ["Catégorie", da.categorie],
     ["Date souhaitée", fmtDate(da.date_souhaitee)], ["Urgence", da.urgence + (da.impact ? " - " + da.impact : "")],
-    ["Fournisseur suggéré", da.fournisseur_suggere || "-"], ["Statut", (STATUTS[da.statut] || {}).l]
+    ["Fournisseur suggéré", da.fournisseur_suggere || "-"], ["Statut", (STATUTS[da.statut] || {}).l + (da.sage_piece ? " - Sage " + da.sage_piece : "")]
   ];
   if (da.categorie === "Pièces de rechange") pairs.push(["Marque", da.marque || "-"], ["Modèle machine / véhicule", da.modele || "-"]);
   const body = [];
@@ -694,12 +828,12 @@ function makePDF(da){
   const lignes = da.lignes || [];
   doc.autoTable({
     startY: y, theme: "striped", headStyles: { fillColor: [31, 95, 191] }, styles: { fontSize: 9 },
-    head: [["#", "Désignation", "Référence", "Qté", "Unité", "PU estimé", "Total estimé"]],
-    body: lignes.map((l, i) => [i + 1, T(l.designation), T(l.reference || ""), T(l.quantite), T(l.unite),
+    head: [["#", "Article Sage", "Désignation", "Réf.", "Qté", "Unité", "PU estimé", "Total estimé"]],
+    body: lignes.map((l, i) => [i + 1, T(l.ar_ref || ""), T(l.designation), T(l.reference || ""), T(l.quantite), T(l.unite),
       l.prix_unitaire ? M(l.prix_unitaire) : "-", l.prix_unitaire ? M(num(l.quantite) * num(l.prix_unitaire)) : "-"]),
-    foot: [["", "", "", "", "", "Total estimé", M(da.montant_estime)]],
+    foot: [["", "", "", "", "", "", "Total estimé", M(da.montant_estime)]],
     footStyles: { fillColor: [244, 246, 249], textColor: 20, fontStyle: "bold" },
-    columnStyles: { 0: { cellWidth: 8 }, 3: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "right" } }
+    columnStyles: { 0: { cellWidth: 8 }, 4: { halign: "right" }, 6: { halign: "right" }, 7: { halign: "right" } }
   });
   y = doc.lastAutoTable.finalY + 6;
 
@@ -785,7 +919,7 @@ const ACTIONS = {
   },
   pdf(el, da){ makePDF(da).save(da.numero + ".pdf"); },
   exportCSV(){
-    const cols = [["numero","N° DA"],["date_envoi","Envoyée le"],["demandeur_nom","Demandeur"],["service","Service"],["centre_cout","Centre de coût"],["categorie","Catégorie"],
+    const cols = [["numero","N° DA"],["societe","Société"],["sage_piece","Pièce Sage"],["date_envoi","Envoyée le"],["demandeur_nom","Demandeur"],["service","Service"],["centre_cout","Centre de coût"],["categorie","Catégorie"],
       ["objet","Articles"],["montant_estime","Montant estimé"],["urgence","Urgence"],["statut","Statut"],["commentaire_admin","Commentaire"],["finance_statut","Finance"],
       ["bc_numero","N° BC"],["fournisseur_retenu","Fournisseur"],["montant_reel","Montant réel"],["reception_statut","Réception"],["reception_date","Date réception"]];
     const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -836,12 +970,13 @@ const FORMS = {
     // Lignes d'articles
     const lignes = [...document.querySelectorAll("#lignes tr")].map(tr => {
       const g = n => tr.querySelector(`[name=${n}]`).value.trim();
-      return { designation: g("designation"), reference: g("reference") || null, quantite: num(g("quantite")), unite: g("unite"),
+      return { ar_ref: g("ar_ref").toUpperCase() || null, designation: g("designation"), reference: g("reference") || null, quantite: num(g("quantite")), unite: g("unite"),
                prix_unitaire: g("prix_unitaire") === "" ? null : num(g("prix_unitaire")) };
     }).filter(l => l.designation || l.quantite);
     const envoyer = mode === "envoyer";
     if (envoyer){
       const manquants = [];
+      if (!d.societe) manquants.push("société");
       if (!d.service) manquants.push("service");
       if (!d.centre_cout) manquants.push("centre de coût");
       if (!d.categorie) manquants.push("catégorie");
@@ -851,6 +986,11 @@ const FORMS = {
       if (lignes.some(l => !l.designation || !(l.quantite > 0))) manquants.push("désignation et quantité de chaque article");
       if (d.urgence !== "Normal" && !d.impact) manquants.push("impact de l'urgence");
       if (manquants.length) throw new Error("À compléter avant l'envoi : " + manquants.join(", ") + ".");
+      const cat = await loadCatalog(d.societe);
+      if (cat.articles.length){
+        const inconnus = lignes.map((l, i) => (!l.ar_ref || !cat.art.has(l.ar_ref)) ? `ligne ${i + 1}${l.ar_ref ? " (" + l.ar_ref + ")" : ""}` : null).filter(Boolean);
+        if (inconnus.length) throw new Error("Choisissez un article Sage existant pour : " + inconnus.join(", ") + ".");
+      }
     }
     if (d.urgence === "Normal") d.impact = null;
     if (d.categorie !== "Pièces de rechange"){ d.marque = null; d.modele = null; }
@@ -876,6 +1016,19 @@ const FORMS = {
     toast(`Demande ${da.numero} : ${STATUTS[d.statut].l}. Demandeur notifié${res.email ? " (notification + email)" : ""}.`);
     if (!res.email) toast("Email non envoyé : " + (res.raison || res.error || "raison inconnue") + " (détails : /api/notify)", true);
     await reloadAll(); render();
+  },
+  async adminSage(form, d, _m, da){
+    const cat = await loadCatalog(da.societe);
+    const four = String(d.sage_fournisseur || "").trim().toUpperCase();
+    if (!four) throw new Error("Choisissez le fournisseur Sage.");
+    if (cat.fournisseurs.length && !cat.four.has(four)) throw new Error("Fournisseur Sage inconnu : " + four);
+    const lignes = (da.lignes || []).map(l => Object.assign({}, l));
+    form.querySelectorAll(".sage-ligne").forEach(inp => { lignes[+inp.dataset.idx].ar_ref = inp.value.trim().toUpperCase() || null; });
+    const manquants = lignes.map((l, i) => (!l.ar_ref || (cat.articles.length && !cat.art.has(l.ar_ref))) ? "ligne " + (i + 1) : null).filter(Boolean);
+    if (manquants.length) throw new Error("Article Sage manquant ou inconnu : " + manquants.join(", "));
+    if (da.sage_statut === "fichier_pret" && !confirm("Un fichier d'import a déjà été généré. S'il a déjà été importé dans Sage, ne le regénérez pas (doublon). Continuer ?")) return;
+    chk(await sb.from("demandes").update({ sage_fournisseur: four, lignes, sage_statut: "a_exporter" }).eq("id", da.id).select().single());
+    toast("Demande transmise au connecteur Sage."); await reloadAll(); render();
   },
   async adminFinance(form, d, _m, da){
     const changed = d.finance_statut !== da.finance_statut;

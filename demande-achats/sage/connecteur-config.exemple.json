@@ -1,0 +1,26 @@
+{
+  "SupabaseUrl": "https://VOTRE-PROJET.supabase.co",
+  "ServiceRoleKey": "COLLEZ_ICI_LA_CLE_SERVICE_ROLE_DE_SUPABASE",
+
+  "SqlInstance": "localhost\\SAGE100C2",
+  "SqlUtilisateur": "",
+  "SqlMotDePasse": "",
+
+  "Societes": [
+    { "Code": "GES_VALORISE", "Base": "GES_VALORISE" },
+    { "Code": "GES_ECO",      "Base": "GES_ECO" }
+  ],
+
+  "DossierImport": "C:\\SageImport",
+  "Depot": "1",
+  "CatalogueToutesLesMinutes": 60,
+
+  "Fichier": {
+    "Separateur": ";",
+    "FormatDate": "ddMMyy",
+    "SeparateurDecimal": ",",
+    "Encodage": "windows-1252",
+    "Entete": ["E", "{TYPE}", "{PIECE}", "{DATE}", "{REFERENCE}", "{FOURNISSEUR}", "{DEPOT}"],
+    "Ligne":  ["L", "{ARTICLE}", "{DESIGNATION}", "{QUANTITE}", "{PRIX}"]
+  }
+}
