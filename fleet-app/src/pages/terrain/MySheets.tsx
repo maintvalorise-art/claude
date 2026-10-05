@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Badge, Card, Empty, ErrorBox, PageHeader, Spinner, Table, Td } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
-import { fetchVehicles } from '../../lib/data';
+import { fetchVehicles, vehicleLabel } from '../../lib/data';
 import { fmtDate, fmtNumber } from '../../lib/format';
 import { supabase } from '../../lib/supabase';
 import type { ControlSheet } from '../../lib/types';
@@ -14,7 +14,7 @@ export default function MySheets() {
       fetchVehicles(false),
       supabase.from('control_sheets').select('*').eq('chauffeur_id', profile!.id).order('created_at', { ascending: false }).limit(100).then(must),
     ]);
-    return { vehicles: new Map(vehicles.map((v) => [v.id, v.matricule])), sheets: sheets as ControlSheet[] };
+    return { vehicles: new Map(vehicles.map((v) => [v.id, vehicleLabel(v)])), sheets: sheets as ControlSheet[] };
   });
 
   return (

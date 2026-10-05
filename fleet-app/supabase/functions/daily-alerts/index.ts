@@ -1,117 +1,99 @@
-// Envoie chaque jour un e-mail récapitulatif des échéances proches ou dépassées
-// (visite technique, assurance, tachygraphe, permis, vidange...).
-// Planifié via pg_cron (voir README). E-mail envoyé avec Resend (https://resend.com).
+// E-mail quotidien des alertes : chaque destinataire reçoit les alertes de ses modules.
+//  - achats  : acheteurs, direction        - magasin : magasiniers, acheteurs
+//  - flotte  : responsables flotte          - bennes  : exploitation
+//  - tout    : administrateurs + adresses de ALERT_EMAILS
+// Planifié via pg_cron (voir README). Envoi par Resend (https://resend.com).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-type Echeance = {
-  type: string;
-  libelle: string | null;
-  matricule: string | null;
-  chauffeur_nom: string | null;
-  date_expiration: string | null;
-  jours_restants: number | null;
-  reste_compteur: number | null;
-  niveau: 'expire' | 'urgent' | 'bientot' | 'ok';
+type Alerte = { module: string; niveau: 'expire' | 'urgent' | 'bientot'; titre: string; cible: string | null; detail: string | null; lien: string | null };
+
+const MODULE_ROLES: Record<string, string[]> = {
+  achats: ['acheteur', 'direction'],
+  magasin: ['magasinier', 'acheteur'],
+  flotte: ['responsable_flotte'],
+  bennes: ['exploitation'],
+};
+const MODULES: Record<string, string> = { achats: 'Achats', magasin: 'Magasin', flotte: 'Flotte', bennes: 'Bennes' };
+const NIVEAUX = { expire: ['Dépassé', '#b91c1c'], urgent: ['Urgent', '#c2410c'], bientot: ['Bientôt', '#a16207'] } as const;
+const DOCS: Record<string, string> = {
+  carte_grise: 'Carte grise', assurance: 'Assurance', visite_technique: 'Visite technique', vignette: 'Vignette',
+  autorisation_transport: 'Autorisation de transport', autorisation_dechets_dangereux: 'Autorisation déchets dangereux',
+  carnet_entretien: "Carnet d'entretien", tachygraphe: 'Tachygraphe', extincteur: 'Extincteurs', permis: 'Permis',
+  carte_professionnelle: 'Carte professionnelle', visite_medicale: 'Visite médicale', autre: 'Document',
 };
 
-const TYPES: Record<string, string> = {
-  visite_technique: 'Visite technique',
-  assurance: 'Assurance',
-  vignette: 'Vignette',
-  carte_grise: 'Carte grise',
-  tachygraphe: 'Contrôle tachygraphe',
-  extincteur: 'Extincteurs',
-  autorisation: 'Autorisation de circulation',
-  permis: 'Permis de conduire',
-  carte_professionnelle: 'Carte professionnelle',
-  visite_medicale: 'Visite médicale',
-  vidange: 'Vidange',
-  autre: 'Autre',
-};
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
-const NIVEAUX = { expire: ['Expiré', '#b91c1c'], urgent: ['Urgent', '#c2410c'], bientot: ['Bientôt', '#a16207'] } as const;
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
-
-function echeanceTexte(e: Echeance) {
-  if (e.type === 'vidange') {
-    const r = e.reste_compteur ?? 0;
-    return r <= 0 ? `dépassée de ${Math.abs(r)}` : `dans ${r}`;
+function render(alertes: Alerte[], appUrl: string) {
+  const order = { expire: 0, urgent: 1, bientot: 2 };
+  const byModule = new Map<string, Alerte[]>();
+  for (const a of [...alertes].sort((x, y) => order[x.niveau] - order[y.niveau])) byModule.set(a.module, [...(byModule.get(a.module) ?? []), a]);
+  let html = '<div style="font-family:Arial,sans-serif;font-size:14px"><h2>Alertes du jour – Valorise Maroc</h2>';
+  for (const [m, list] of byModule) {
+    html += `<h3>${MODULES[m] ?? m} (${list.length})</h3><table style="border-collapse:collapse;border:1px solid #ddd">`;
+    for (const a of list) {
+      const [label, color] = NIVEAUX[a.niveau];
+      const titre = DOCS[a.titre] ?? a.titre;
+      const link = appUrl && a.lien ? `<a href="${esc(appUrl + a.lien)}">ouvrir</a>` : '';
+      html += `<tr><td style="padding:4px 8px;color:${color};font-weight:600">${label}</td><td style="padding:4px 8px">${esc(titre)}</td>`
+        + `<td style="padding:4px 8px">${esc(a.cible ?? '')}</td><td style="padding:4px 8px">${esc(a.detail ?? '')}</td><td style="padding:4px 8px">${link}</td></tr>`;
+    }
+    html += '</table>';
   }
-  const j = e.jours_restants ?? 0;
-  const date = e.date_expiration ? new Date(e.date_expiration).toLocaleDateString('fr-FR') : '';
-  if (j < 0) return `expiré depuis ${-j} j (${date})`;
-  if (j === 0) return `expire aujourd'hui (${date})`;
-  return `dans ${j} j (${date})`;
+  return html + '</div>';
 }
 
 Deno.serve(async (req) => {
-  // Protection simple : l'appel doit fournir la clé service_role (pg_cron) ou CRON_SECRET.
   const auth = req.headers.get('Authorization') ?? '';
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const cronSecret = Deno.env.get('CRON_SECRET');
   if (auth !== `Bearer ${serviceKey}` && !(cronSecret && auth === `Bearer ${cronSecret}`)) {
     return new Response('Non autorisé', { status: 401 });
   }
+  const resendKey = Deno.env.get('RESEND_API_KEY');
+  if (!resendKey) return Response.json({ sent: 0, reason: 'RESEND_API_KEY manquant' });
 
   const supabase = createClient(Deno.env.get('SUPABASE_URL')!, serviceKey);
-  const { data, error } = await supabase
-    .from('v_echeances')
-    .select('type, libelle, matricule, chauffeur_nom, date_expiration, jours_restants, reste_compteur, niveau')
-    .neq('niveau', 'ok');
+  const [{ data: alertes, error }, { data: profiles }] = await Promise.all([
+    supabase.from('v_alertes').select('module, niveau, titre, cible, detail, lien').neq('niveau', 'ok'),
+    supabase.from('profiles').select('email, role').eq('active', true),
+  ]);
   if (error) return new Response(error.message, { status: 500 });
+  if (!alertes?.length) return Response.json({ sent: 0, alertes: 0 });
 
-  const rows = (data as Echeance[]).sort((a, b) => {
-    const order = { expire: 0, urgent: 1, bientot: 2, ok: 3 };
-    return order[a.niveau] - order[b.niveau];
-  });
-  if (rows.length === 0) return Response.json({ sent: false, count: 0 });
-
-  // Destinataires : ALERT_EMAILS (séparés par des virgules).
-  const to = (Deno.env.get('ALERT_EMAILS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const resendKey = Deno.env.get('RESEND_API_KEY');
-  if (!resendKey || to.length === 0) {
-    return Response.json({ sent: false, count: rows.length, reason: 'RESEND_API_KEY ou ALERT_EMAILS manquant' });
+  // Destinataires et modules suivis.
+  const loginDomain = Deno.env.get('LOGIN_DOMAIN') ?? 'flotte.local';
+  const recipients = new Map<string, Set<string>>();
+  const add = (email: string, modules: string[]) => {
+    if (!email || email.endsWith('@' + loginDomain)) return;
+    const set = recipients.get(email) ?? new Set<string>();
+    modules.forEach((m) => set.add(m));
+    recipients.set(email, set);
+  };
+  for (const p of profiles ?? []) {
+    if (!p.email) continue;
+    if (p.role === 'admin') add(p.email, Object.keys(MODULES));
+    for (const [m, roles] of Object.entries(MODULE_ROLES)) if (roles.includes(p.role)) add(p.email, [m]);
   }
+  (Deno.env.get('ALERT_EMAILS') ?? '').split(',').map((s) => s.trim()).filter(Boolean).forEach((e) => add(e, Object.keys(MODULES)));
 
-  const lignes = rows
-    .map((e) => {
-      const [label, color] = NIVEAUX[e.niveau as keyof typeof NIVEAUX];
-      const cible = e.matricule ?? e.chauffeur_nom ?? '';
-      return `<tr>
-        <td style="padding:6px 10px;color:${color};font-weight:600">${label}</td>
-        <td style="padding:6px 10px">${escapeHtml(TYPES[e.type] ?? e.type)}${e.libelle ? ' – ' + escapeHtml(e.libelle) : ''}</td>
-        <td style="padding:6px 10px">${escapeHtml(cible)}</td>
-        <td style="padding:6px 10px">${escapeHtml(echeanceTexte(e))}</td>
-      </tr>`;
-    })
-    .join('');
-
-  const nbExp = rows.filter((r) => r.niveau === 'expire').length;
-  const html = `<div style="font-family:Arial,sans-serif">
-    <h2>Échéances de la flotte</h2>
-    <p>${rows.length} échéance(s) à traiter, dont <b>${nbExp}</b> déjà dépassée(s).</p>
-    <table style="border-collapse:collapse;border:1px solid #ddd">
-      <thead><tr style="background:#f3f4f6;text-align:left">
-        <th style="padding:6px 10px">Niveau</th><th style="padding:6px 10px">Échéance</th>
-        <th style="padding:6px 10px">Véhicule / chauffeur</th><th style="padding:6px 10px">Délai</th>
-      </tr></thead>
-      <tbody>${lignes}</tbody>
-    </table>
-  </div>`;
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      from: Deno.env.get('ALERT_FROM') ?? 'Flotte <onboarding@resend.dev>',
-      to,
-      subject: `[Flotte] ${rows.length} échéance(s) à traiter${nbExp ? ` – ${nbExp} dépassée(s)` : ''}`,
-      html,
-    }),
-  });
-  if (!res.ok) return new Response(await res.text(), { status: 502 });
-  return Response.json({ sent: true, count: rows.length });
+  const appUrl = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
+  let sent = 0;
+  for (const [email, modules] of recipients) {
+    const list = (alertes as Alerte[]).filter((a) => modules.has(a.module));
+    if (!list.length) continue;
+    const nbExp = list.filter((a) => a.niveau === 'expire').length;
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: Deno.env.get('ALERT_FROM') ?? 'Valorise Maroc <onboarding@resend.dev>',
+        to: [email],
+        subject: `[Valorise] ${list.length} alerte(s)${nbExp ? ` dont ${nbExp} dépassée(s)` : ''}`,
+        html: render(list, appUrl),
+      }),
+    });
+    if (res.ok) sent++;
+  }
+  return Response.json({ sent, alertes: alertes.length });
 });

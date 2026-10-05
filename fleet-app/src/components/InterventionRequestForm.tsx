@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { vehicleLabel } from '../lib/data';
 import { INTERVENTION_TYPE_AR, INTERVENTION_TYPE_LABELS, PRIORITY } from '../lib/labels';
 import { errorMessage, supabase } from '../lib/supabase';
 import type { InterventionType, Priority, Vehicle } from '../lib/types';
 import { Button, ErrorBox, Field, Input, Select, Textarea } from './ui';
 
-const TYPES = (Object.keys(INTERVENTION_TYPE_LABELS) as InterventionType[]).filter((t) => t !== 'controle');
+const TYPES = (Object.keys(INTERVENTION_TYPE_LABELS) as InterventionType[]).filter((t) => t !== 'controle' && t !== 'accident' && t !== 'preventive');
 
 /** Formulaire de demande d'intervention (vidange, panne, ...). */
 export default function InterventionRequestForm({
@@ -66,7 +67,7 @@ export default function InterventionRequestForm({
         <Select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} required>
           <option value="">— Choisir —</option>
           {vehicles.map((v) => (
-            <option key={v.id} value={v.id}>{v.matricule} {v.marque ? `· ${v.marque}` : ''}</option>
+            <option key={v.id} value={v.id}>{vehicleLabel(v)} {v.marque ? `· ${v.marque}` : ''}</option>
           ))}
         </Select>
       </Field>

@@ -1,33 +1,58 @@
+import type { ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import { Spinner } from './components/ui';
 import { useAuth } from './context/AuthContext';
+import { can, type Permission } from './lib/roles';
 import { supabaseConfigured } from './lib/supabase';
 import Login from './pages/Login';
-import DriverHome from './pages/driver/DriverHome';
-import ControlSheetForm from './pages/driver/ControlSheetForm';
-import MyRequests from './pages/driver/MyRequests';
-import MySheets from './pages/driver/MySheets';
-import Dashboard from './pages/staff/Dashboard';
-import Vehicles from './pages/staff/Vehicles';
-import VehicleDetail from './pages/staff/VehicleDetail';
-import Deadlines from './pages/staff/Deadlines';
-import Interventions from './pages/staff/Interventions';
-import ControlSheets from './pages/staff/ControlSheets';
+import Home from './pages/Home';
+import Alertes from './pages/Alertes';
+import Kpi from './pages/Kpi';
 import ControlSheetDetail from './pages/ControlSheetDetail';
-import Drivers from './pages/staff/Drivers';
-import Settings from './pages/staff/Settings';
+import ControlSheetForm from './pages/terrain/ControlSheetForm';
+import MyRequests from './pages/terrain/MyRequests';
+import MySheets from './pages/terrain/MySheets';
+import PleinForm from './pages/terrain/PleinForm';
+import TrajetForm from './pages/terrain/TrajetForm';
+import AccidentForm from './pages/terrain/AccidentForm';
+import DemandesList from './pages/achats/DemandesList';
+import DemandeNew from './pages/achats/DemandeNew';
+import DemandeDetail from './pages/achats/DemandeDetail';
+import Fournisseurs from './pages/achats/Fournisseurs';
+import FournisseurDetail from './pages/achats/FournisseurDetail';
+import Articles from './pages/magasin/Articles';
+import ArticleDetail from './pages/magasin/ArticleDetail';
+import MouvementForm from './pages/magasin/MouvementForm';
+import Mouvements from './pages/magasin/Mouvements';
+import Inventaires from './pages/magasin/Inventaires';
+import InventaireDetail from './pages/magasin/InventaireDetail';
+import Vehicles from './pages/flotte/Vehicles';
+import VehicleDetail from './pages/flotte/VehicleDetail';
+import Deadlines from './pages/flotte/Deadlines';
+import Interventions from './pages/flotte/Interventions';
+import ControlSheets from './pages/flotte/ControlSheets';
+import Accidents from './pages/flotte/Accidents';
+import AccidentDetail from './pages/flotte/AccidentDetail';
+import Gasoil from './pages/flotte/Gasoil';
+import Trajets from './pages/flotte/Trajets';
+import Bennes from './pages/bennes/Bennes';
+import BenneDetail from './pages/bennes/BenneDetail';
+import Clients from './pages/bennes/Clients';
+import BenneMouvement from './pages/bennes/BenneMouvement';
+import Users from './pages/admin/Users';
+import Settings from './pages/admin/Settings';
 
 export default function App() {
-  const { session, profile, loading, isStaff, isAdmin, signOut } = useAuth();
+  const { session, profile, loading, signOut } = useAuth();
 
   if (!supabaseConfigured) {
     return (
       <div className="mx-auto max-w-lg p-8 text-sm">
         <h1 className="mb-2 text-xl font-bold">Configuration manquante</h1>
         <p>
-          Copiez <code>.env.example</code> vers <code>.env</code> et renseignez <code>VITE_SUPABASE_URL</code> et{' '}
-          <code>VITE_SUPABASE_ANON_KEY</code>, puis relancez l'application.
+          Renseignez <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code> (fichier <code>.env</code> en local,
+          ou « Environment Variables » sur Vercel), puis relancez / redéployez l'application.
         </p>
       </div>
     );
@@ -44,29 +69,59 @@ export default function App() {
     );
   }
 
+  const guard = (perm: Permission, el: ReactNode) => (can(profile, perm) ? el : <Navigate to="/" replace />);
+
   return (
     <Routes>
       <Route element={<Layout />}>
-        {isStaff ? (
-          <>
-            <Route index element={<Dashboard />} />
-            <Route path="vehicules" element={<Vehicles />} />
-            <Route path="vehicules/:id" element={<VehicleDetail />} />
-            <Route path="echeances" element={<Deadlines />} />
-            <Route path="interventions" element={<Interventions />} />
-            <Route path="fiches" element={<ControlSheets />} />
-            <Route path="chauffeurs" element={<Drivers />} />
-            {isAdmin && <Route path="parametres" element={<Settings />} />}
-          </>
-        ) : (
-          <>
-            <Route index element={<DriverHome />} />
-            <Route path="mes-demandes" element={<MyRequests />} />
-            <Route path="mes-fiches" element={<MySheets />} />
-          </>
-        )}
+        <Route index element={<Home />} />
+        <Route path="alertes" element={<Alertes />} />
+        <Route path="kpi" element={guard('kpi', <Kpi />)} />
+
+        {/* Terrain */}
         <Route path="ma-fiche" element={<ControlSheetForm />} />
+        <Route path="mes-demandes" element={<MyRequests />} />
+        <Route path="mes-fiches" element={<MySheets />} />
+        <Route path="plein" element={<PleinForm />} />
+        <Route path="trajet" element={<TrajetForm />} />
+        <Route path="accident" element={<AccidentForm />} />
         <Route path="fiches/:id" element={<ControlSheetDetail />} />
+
+        {/* Achats (les droits fins sont appliqués par la base) */}
+        <Route path="achats" element={<DemandesList />} />
+        <Route path="achats/nouvelle" element={<DemandeNew />} />
+        <Route path="achats/:id" element={<DemandeDetail />} />
+        <Route path="fournisseurs" element={guard('fournisseursVoir', <Fournisseurs />)} />
+        <Route path="fournisseurs/:id" element={guard('fournisseursVoir', <FournisseurDetail />)} />
+
+        {/* Magasin */}
+        <Route path="magasin" element={guard('magasinVoir', <Articles />)} />
+        <Route path="magasin/mouvement" element={guard('magasinGerer', <MouvementForm />)} />
+        <Route path="magasin/mouvements" element={guard('magasinVoir', <Mouvements />)} />
+        <Route path="magasin/inventaires" element={guard('magasinVoir', <Inventaires />)} />
+        <Route path="magasin/inventaires/:id" element={guard('magasinVoir', <InventaireDetail />)} />
+        <Route path="magasin/:id" element={guard('magasinVoir', <ArticleDetail />)} />
+
+        {/* Flotte */}
+        <Route path="vehicules" element={guard('flotteVoir', <Vehicles />)} />
+        <Route path="vehicules/:id" element={guard('flotteVoir', <VehicleDetail />)} />
+        <Route path="echeances" element={guard('flotteVoir', <Deadlines />)} />
+        <Route path="interventions" element={guard('flotteVoir', <Interventions />)} />
+        <Route path="fiches" element={guard('flotteVoir', <ControlSheets />)} />
+        <Route path="accidents" element={<Accidents />} />
+        <Route path="accidents/:id" element={<AccidentDetail />} />
+        <Route path="gasoil" element={guard('flotteVoir', <Gasoil />)} />
+        <Route path="trajets" element={<Trajets />} />
+
+        {/* Bennes */}
+        <Route path="bennes" element={guard('bennesVoir', <Bennes />)} />
+        <Route path="bennes/mouvement" element={guard('bennesMouvement', <BenneMouvement />)} />
+        <Route path="bennes/:id" element={guard('bennesVoir', <BenneDetail />)} />
+        <Route path="clients" element={guard('bennesVoir', <Clients />)} />
+
+        {/* Administration */}
+        <Route path="utilisateurs" element={guard('admin', <Users />)} />
+        <Route path="parametres" element={guard('admin', <Settings />)} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

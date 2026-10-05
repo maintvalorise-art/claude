@@ -20,7 +20,7 @@ function toEmail(username: string) {
   return u.includes('@') ? u : `${u}@${LOGIN_DOMAIN}`;
 }
 
-const ROLES = ['chauffeur', 'gestionnaire', 'admin'];
+const ROLES = ['admin', 'direction', 'acheteur', 'magasinier', 'responsable_flotte', 'exploitation', 'chauffeur', 'demandeur'];
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
@@ -67,7 +67,14 @@ Deno.serve(async (req) => {
 
     const { error: upErr } = await admin
       .from('profiles')
-      .update({ full_name: fullName || username, role, phone: body.phone ?? null })
+      .update({
+        full_name: fullName || username,
+        role,
+        phone: body.phone ?? null,
+        service: body.service ?? null,
+        manager_id: body.manager_id || null,
+        demandeur_autorise: Boolean(body.demandeur_autorise),
+      })
       .eq('id', data.user.id);
     if (upErr) return json({ error: upErr.message }, 400);
     return json({ id: data.user.id });

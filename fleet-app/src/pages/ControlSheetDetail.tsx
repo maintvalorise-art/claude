@@ -1,16 +1,21 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Badge, Button, Card, ErrorBox, PageHeader, Spinner, cx } from '../components/ui';
-import { fetchControlItems, fetchDriverNames, groupByCategory } from '../lib/data';
+import { Badge, Button, Card, ErrorBox, Input, PageHeader, Spinner, cx } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
+import { can } from '../lib/roles';
+import { fetchControlItems, fetchDriverNames, groupByCategory, vehicleLabel } from '../lib/data';
 import { fmtDate, fmtDateTime, fmtNumber } from '../lib/format';
-import { supabase } from '../lib/supabase';
+import { errorMessage, supabase } from '../lib/supabase';
 import type { ControlResult, ControlSheet, Vehicle } from '../lib/types';
 import { must, useAsync } from '../lib/useAsync';
 
 export default function ControlSheetDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { data, loading, error } = useAsync(async () => {
+  const { profile } = useAuth();
+  const [commentaire, setCommentaire] = useState('');
+  const [valError, setValError] = useState<string | null>(null);
+  const { data, loading, error, reload } = useAsync(async () => {
     const sheet = must(await supabase.from('control_sheets').select('*').eq('id', id!).single()) as ControlSheet;
     const [vehicle, results, items, names] = await Promise.all([
       supabase.from('vehicles').select('*').eq('id', sheet.vehicle_id).single().then(must),
@@ -26,10 +31,19 @@ export default function ControlSheetDetail() {
   if (error || !data) return <ErrorBox>{error ?? 'Fiche introuvable'}</ErrorBox>;
   const { sheet, vehicle, res, items, names } = data;
 
+  async function valider() {
+    setValError(null);
+    const { error: err } = await supabase.from('control_sheets')
+      .update({ valide_par: profile!.id, valide_le: new Date().toISOString(), commentaire_validation: commentaire.trim() || null })
+      .eq('id', sheet.id);
+    if (err) setValError(errorMessage(err));
+    else void reload();
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-4 print:max-w-none">
       <PageHeader
-        title={<>Fiche de contrôle · {vehicle.matricule}</>}
+        title={<>Fiche de contrôle · {vehicleLabel(vehicle)}</>}
         subtitle={`${fmtDate(sheet.date_controle)} · enregistrée le ${fmtDateTime(sheet.created_at)}`}
         actions={
           <div className="flex gap-2 print:hidden">
@@ -67,6 +81,17 @@ export default function ControlSheetDetail() {
           </ul>
         </Card>
       ))}
+      <Card title="Validation responsable flotte" className="print:break-inside-avoid">
+        {sheet.valide_le ? (
+          <p className="text-sm">✓ Validée par <b>{names.get(sheet.valide_par ?? '') ?? '—'}</b> le {fmtDateTime(sheet.valide_le)}{sheet.commentaire_validation && <> · « {sheet.commentaire_validation} »</>}</p>
+        ) : can(profile, 'flotteGerer') ? (
+          <div className="flex flex-wrap gap-2 print:hidden">
+            <Input className="flex-1" placeholder="Commentaire (facultatif)" value={commentaire} onChange={(e) => setCommentaire(e.target.value)} />
+            <Button onClick={valider}>Valider la fiche</Button>
+          </div>
+        ) : <p className="text-sm text-slate-500">En attente de validation.</p>}
+        <ErrorBox>{valError}</ErrorBox>
+      </Card>
       {sheet.remarques && (
         <Card title="Remarques · ملاحظات">
           <p className="whitespace-pre-line text-sm">{sheet.remarques}</p>

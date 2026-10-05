@@ -7,8 +7,7 @@ interface AuthState {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
-  isStaff: boolean;
-  isAdmin: boolean;
+  reloadProfile: () => void;
   signIn: (login: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -36,6 +35,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const userId = session?.user.id;
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;
@@ -53,14 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [userId]);
+  }, [userId, tick]);
 
   const value: AuthState = {
     session,
     profile,
     loading,
-    isStaff: profile?.role === 'gestionnaire' || profile?.role === 'admin',
-    isAdmin: profile?.role === 'admin',
+    reloadProfile: () => setTick((t) => t + 1),
     async signIn(login, password) {
       const { error } = await supabase.auth.signInWithPassword({ email: loginToEmail(login), password });
       if (error) throw new Error(error.message === 'Invalid login credentials' ? 'Identifiant ou mot de passe incorrect' : error.message);

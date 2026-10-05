@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, ErrorBox, Field, Input, PageHeader, Select, Spinner, Textarea, cx } from '../../components/ui';
 import { useAuth } from '../../context/AuthContext';
-import { fetchControlItems, fetchDriverNames, fetchVehicles, groupByCategory } from '../../lib/data';
+import { fetchControlItems, fetchDriverNames, fetchVehicles, groupByCategory, vehicleLabel } from '../../lib/data';
 import { fmtNumber, todayIso } from '../../lib/format';
 import { errorMessage, supabase } from '../../lib/supabase';
 import { useAsync } from '../../lib/useAsync';
@@ -13,13 +13,14 @@ export default function ControlSheetForm() {
   const { profile } = useAuth();
   const { data, loading, error } = useAsync(async () => {
     const [vehicles, items, drivers] = await Promise.all([fetchVehicles(), fetchControlItems(), fetchDriverNames()]);
-    return { vehicles: vehicles.filter((v) => v.statut !== 'hors_service'), items, drivers };
+    return { vehicles: vehicles.filter((v) => !['hors_service', 'immobilise'].includes(v.statut)), items, drivers };
   });
 
   const [vehicleId, setVehicleId] = useState('');
   const [date, setDate] = useState(todayIso());
   const [compteur, setCompteur] = useState('');
   const [prochaineVidange, setProchaineVidange] = useState('');
+  const [vidangeConnue, setVidangeConnue] = useState(false);
   const [precedentId, setPrecedentId] = useState('');
   const [remarques, setRemarques] = useState('');
   const [answers, setAnswers] = useState<Record<number, Answer>>({});
@@ -40,8 +41,17 @@ export default function ControlSheetForm() {
   // Préremplissage à partir du véhicule choisi.
   useEffect(() => {
     if (!vehicle) return;
-    setProchaineVidange(vehicle.prochaine_vidange ? String(vehicle.prochaine_vidange) : '');
     let cancelled = false;
+    setProchaineVidange('');
+    setVidangeConnue(false);
+    supabase.from('v_plans_maintenance').select('prochain_compteur').eq('vehicle_id', vehicle.id).eq('type', 'vidange').limit(1)
+      .then(({ data: plans }) => {
+        const prochain = (plans?.[0] as { prochain_compteur: number | null } | undefined)?.prochain_compteur;
+        if (!cancelled && prochain != null) {
+          setProchaineVidange(String(prochain));
+          setVidangeConnue(true);
+        }
+      });
     supabase.rpc('vehicle_last_driver', { p_vehicle_id: vehicle.id }).then(({ data: last }) => {
       if (!cancelled) setPrecedentId((last as string | null) ?? '');
     });
@@ -158,7 +168,7 @@ export default function ControlSheetForm() {
               <option value="">— Choisir —</option>
               {data.vehicles.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.matricule} {v.marque ? `· ${v.marque}` : ''} {v.modele ?? ''}
+                  {vehicleLabel(v)} {v.marque ? `· ${v.marque}` : ''} {v.modele ?? ''}
                 </option>
               ))}
             </Select>
@@ -178,7 +188,7 @@ export default function ControlSheetForm() {
               inputMode="numeric"
               value={prochaineVidange}
               onChange={(e) => setProchaineVidange(e.target.value)}
-              disabled={!!vehicle?.prochaine_vidange}
+              disabled={vidangeConnue}
             />
           </Field>
           <Field label={<>Conducteur précédent <span className="ar">· اسم السائق السابق</span></>}>

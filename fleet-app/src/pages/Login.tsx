@@ -29,8 +29,8 @@ export default function Login() {
         <div className="flex items-center gap-3">
           <img src="/favicon.svg" alt="" className="h-10 w-10" />
           <div>
-            <h1 className="text-lg font-bold">Gestion de flotte</h1>
-            <p className="text-xs text-slate-500">Camions, engins & fiches de contrôle</p>
+            <h1 className="text-lg font-bold">Valorise Maroc</h1>
+            <p className="text-xs text-slate-500">Achats · Magasin · Flotte · Bennes</p>
           </div>
         </div>
         <Field label={<>Identifiant <span className="ar text-slate-500">· اسم المستخدم</span></>}>

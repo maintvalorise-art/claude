@@ -42,16 +42,22 @@ export function Field({ label, hint, children, className }: { label: ReactNode; 
 const inputCls =
   'block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:bg-slate-100';
 
+/** Une largeur explicite (w-40, max-w-xs…) remplace la largeur pleine par défaut. */
+function fieldCls(className?: string) {
+  const base = className && /(^|\s)w-/.test(className) ? inputCls.replace('w-full', '') : inputCls;
+  return cx(base, className);
+}
+
 export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...props} className={cx(inputCls, props.className)} />;
+  return <input {...props} className={fieldCls(props.className)} />;
 }
 
 export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
-  return <select {...props} className={cx(inputCls, props.className)} />;
+  return <select {...props} className={fieldCls(props.className)} />;
 }
 
 export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea rows={3} {...props} className={cx(inputCls, props.className)} />;
+  return <textarea rows={3} {...props} className={fieldCls(props.className)} />;
 }
 
 const TONES: Record<Tone, string> = {
@@ -61,6 +67,7 @@ const TONES: Record<Tone, string> = {
   amber: 'bg-amber-50 text-amber-800 ring-amber-200',
   orange: 'bg-orange-50 text-orange-700 ring-orange-200',
   red: 'bg-red-50 text-red-700 ring-red-200',
+  violet: 'bg-violet-50 text-violet-700 ring-violet-200',
 };
 
 export function Badge({ tone = 'gray', children }: { tone?: Tone; children: ReactNode }) {
@@ -179,7 +186,7 @@ export function Td({ children, className }: { children?: ReactNode; className?: 
 export function StatCard({ label, value, tone = 'gray', hint }: { label: string; value: ReactNode; tone?: Tone; hint?: ReactNode }) {
   const accent: Record<Tone, string> = {
     gray: 'border-l-slate-400', green: 'border-l-emerald-500', blue: 'border-l-sky-500',
-    amber: 'border-l-amber-500', orange: 'border-l-orange-500', red: 'border-l-red-500',
+    amber: 'border-l-amber-500', orange: 'border-l-orange-500', red: 'border-l-red-500', violet: 'border-l-violet-500',
   };
   return (
     <div className={cx('rounded-xl border border-l-4 border-slate-200 bg-white p-4 shadow-sm', accent[tone])}>
@@ -191,3 +198,34 @@ export function StatCard({ label, value, tone = 'gray', hint }: { label: string;
 }
 
 export { cx };
+
+/** Onglets simples. */
+export function Tabs<K extends string>({ tabs, value, onChange }: { tabs: [K, ReactNode][]; value: K; onChange: (k: K) => void }) {
+  return (
+    <div className="mb-4 flex gap-1 overflow-x-auto border-b border-slate-200 print:hidden">
+      {tabs.map(([k, label]) => (
+        <button
+          key={k}
+          type="button"
+          onClick={() => onChange(k)}
+          className={cx(
+            '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
+            value === k ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800',
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Ligne libellé / valeur pour les fiches de détail. */
+export function Info({ label, children }: { label: ReactNode; children: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs uppercase tracking-wide text-slate-500">{label}</dt>
+      <dd className="font-medium text-slate-900">{children ?? '—'}</dd>
+    </div>
+  );
+}
