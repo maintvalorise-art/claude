@@ -199,3 +199,6 @@ where current_user in ('service_role', 'postgres') or case a.module
       end;
 
 grant select on public.v_alertes to authenticated;
+
+-- Recharge le cache de l'API Supabase pour que les nouvelles tables soient visibles tout de suite.
+notify pgrst, 'reload schema';

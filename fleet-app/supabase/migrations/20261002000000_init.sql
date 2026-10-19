@@ -1659,3 +1659,6 @@ insert into public.control_items (categorie, label_fr, label_ar, ordre) values
   ('Carrosserie & levage', 'Système de levage benne / bras', 'نظام رفع الحاوية', 350),
   ('Carrosserie & levage', 'Sangles et chaînes', 'الأحزمة والسلاسل', 360),
   ('Carrosserie & levage', 'État général du véhicule', 'الحالة العامة للشاحنة', 370);
+
+-- Recharge le cache de l'API Supabase pour que les nouvelles tables soient visibles tout de suite.
+notify pgrst, 'reload schema';
