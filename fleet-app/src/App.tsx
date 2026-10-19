@@ -3,7 +3,9 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import { Spinner } from './components/ui';
 import { useAuth } from './context/AuthContext';
+import { moduleOn } from './lib/config';
 import { can, type Permission } from './lib/roles';
+import type { Module } from './lib/types';
 import { supabaseConfigured } from './lib/supabase';
 import Login from './pages/Login';
 import Home from './pages/Home';
@@ -40,6 +42,8 @@ import Bennes from './pages/bennes/Bennes';
 import BenneDetail from './pages/bennes/BenneDetail';
 import Clients from './pages/bennes/Clients';
 import BenneMouvement from './pages/bennes/BenneMouvement';
+import Planning from './pages/flotte/Planning';
+import HistoriqueMaintenance from './pages/flotte/HistoriqueMaintenance';
 import Users from './pages/admin/Users';
 import Settings from './pages/admin/Settings';
 
@@ -70,6 +74,8 @@ export default function App() {
   }
 
   const guard = (perm: Permission, el: ReactNode) => (can(profile, perm) ? el : <Navigate to="/" replace />);
+  // Module désactivé : ses pages renvoient à l'accueil.
+  const mod = (m: Module, el: ReactNode) => (moduleOn(m) ? el : <Navigate to="/" replace />);
 
   return (
     <Routes>
@@ -88,24 +94,26 @@ export default function App() {
         <Route path="fiches/:id" element={<ControlSheetDetail />} />
 
         {/* Achats (les droits fins sont appliqués par la base) */}
-        <Route path="achats" element={<DemandesList />} />
-        <Route path="achats/nouvelle" element={<DemandeNew />} />
-        <Route path="achats/:id" element={<DemandeDetail />} />
-        <Route path="fournisseurs" element={guard('fournisseursVoir', <Fournisseurs />)} />
-        <Route path="fournisseurs/:id" element={guard('fournisseursVoir', <FournisseurDetail />)} />
+        <Route path="achats" element={mod('achats', <DemandesList />)} />
+        <Route path="achats/nouvelle" element={mod('achats', <DemandeNew />)} />
+        <Route path="achats/:id" element={mod('achats', <DemandeDetail />)} />
+        <Route path="fournisseurs" element={mod('achats', guard('fournisseursVoir', <Fournisseurs />))} />
+        <Route path="fournisseurs/:id" element={mod('achats', guard('fournisseursVoir', <FournisseurDetail />))} />
 
         {/* Magasin */}
-        <Route path="magasin" element={guard('magasinVoir', <Articles />)} />
-        <Route path="magasin/mouvement" element={guard('magasinGerer', <MouvementForm />)} />
-        <Route path="magasin/mouvements" element={guard('magasinVoir', <Mouvements />)} />
-        <Route path="magasin/inventaires" element={guard('magasinVoir', <Inventaires />)} />
-        <Route path="magasin/inventaires/:id" element={guard('magasinVoir', <InventaireDetail />)} />
-        <Route path="magasin/:id" element={guard('magasinVoir', <ArticleDetail />)} />
+        <Route path="magasin" element={mod('magasin', guard('magasinVoir', <Articles />))} />
+        <Route path="magasin/mouvement" element={mod('magasin', guard('magasinGerer', <MouvementForm />))} />
+        <Route path="magasin/mouvements" element={mod('magasin', guard('magasinVoir', <Mouvements />))} />
+        <Route path="magasin/inventaires" element={mod('magasin', guard('magasinVoir', <Inventaires />))} />
+        <Route path="magasin/inventaires/:id" element={mod('magasin', guard('magasinVoir', <InventaireDetail />))} />
+        <Route path="magasin/:id" element={mod('magasin', guard('magasinVoir', <ArticleDetail />))} />
 
         {/* Flotte */}
         <Route path="vehicules" element={guard('flotteVoir', <Vehicles />)} />
         <Route path="vehicules/:id" element={guard('flotteVoir', <VehicleDetail />)} />
         <Route path="echeances" element={guard('flotteVoir', <Deadlines />)} />
+        <Route path="planning" element={guard('flotteVoir', <Planning />)} />
+        <Route path="historique-maintenance" element={guard('flotteVoir', <HistoriqueMaintenance />)} />
         <Route path="interventions" element={guard('flotteVoir', <Interventions />)} />
         <Route path="fiches" element={guard('flotteVoir', <ControlSheets />)} />
         <Route path="accidents" element={<Accidents />} />
@@ -114,10 +122,10 @@ export default function App() {
         <Route path="trajets" element={<Trajets />} />
 
         {/* Bennes */}
-        <Route path="bennes" element={guard('bennesVoir', <Bennes />)} />
-        <Route path="bennes/mouvement" element={guard('bennesMouvement', <BenneMouvement />)} />
-        <Route path="bennes/:id" element={guard('bennesVoir', <BenneDetail />)} />
-        <Route path="clients" element={guard('bennesVoir', <Clients />)} />
+        <Route path="bennes" element={mod('bennes', guard('bennesVoir', <Bennes />))} />
+        <Route path="bennes/mouvement" element={mod('bennes', guard('bennesMouvement', <BenneMouvement />))} />
+        <Route path="bennes/:id" element={mod('bennes', guard('bennesVoir', <BenneDetail />))} />
+        <Route path="clients" element={mod('bennes', guard('bennesVoir', <Clients />))} />
 
         {/* Administration */}
         <Route path="utilisateurs" element={guard('admin', <Users />)} />

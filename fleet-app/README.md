@@ -1,7 +1,11 @@
 # Valorise Maroc : Achats, Spare Parts, Fleet & Bennes
 
 Plateforme unique (PC + téléphone) construite d'après le cahier des charges « Projet Achats, Spare Parts & Fleet
-Management ». Les quatre modules partagent la même base **Supabase** (articles, fournisseurs, équipements,
+Management ».
+
+> **Affichage actuel : Fleet management uniquement** (avec l'espace terrain des chauffeurs). Les modules Achats,
+> Magasin et Bennes restent dans la base mais sont masqués. Pour les réafficher, définissez la variable
+> `VITE_MODULES=flotte,achats,magasin,bennes` (Vercel → Environment Variables), puis faites Redeploy. Les quatre modules partagent la même base **Supabase** (articles, fournisseurs, équipements,
 bennes). Chaque profil n'accède qu'à son module, et ces droits sont appliqués **dans la base**
 (Row Level Security), pas seulement dans l'interface.
 
@@ -78,6 +82,22 @@ La case **« Demandeur autorisé »** ajoute n'importe quel compte à la liste d
   - journal des trajets (client, décharge, fournisseur ; benne ; poids du ticket de pont bascule) ;
   - **rapprochement** km × consommation attendue avec les litres déclarés.
 
+### Planning et historique (Fleet)
+- **Planning (calendrier)** : le calendrier mensuel (ou la vue agenda) affiche :
+  - les dates d'expiration des papiers ;
+  - les maintenances dues, avec une date estimée d'après l'utilisation réelle pour celles au compteur ;
+  - vos rendez-vous.
+- **À planifier** : la liste des papiers expirant sous 90 jours et des maintenances proches. Un clic sur
+  « Planifier » propose une date 2 semaines avant l'échéance (un jour ouvré), que vous pouvez changer.
+- **Rendez-vous** :
+  - Vous pouvez reporter un rendez-vous, le marquer fait ou l'annuler. Il passe automatiquement à « fait »
+    quand le nouveau papier ou la maintenance est enregistré.
+  - Une alerte s'affiche la veille, le jour même et en cas de retard.
+- **Export .ics** vers Google Agenda ou Outlook.
+- **Historique de maintenance** : toutes les interventions de la flotte, filtrées par période, véhicule, type et
+  nature. La synthèse par véhicule donne le nombre d'interventions, le coût, l'immobilisation et la part
+  préventive. Export Excel et PDF.
+
 ### 4. Bennes
 - Référentiel avec n° peint et QR : type, volume, déchet, état, révision.
 - **Phase 1** : chaque mouvement (pose, enlèvement, échange, vidage, retour dépôt, réparation, vérification)
@@ -99,7 +119,8 @@ La case **« Demandeur autorisé »** ajoute n'importe quel compte à la liste d
 
 ### 1. Base de données Supabase
 1. Créez un projet sur <https://supabase.com> (région Europe).
-2. **SQL Editor** : collez puis exécutez `supabase/migrations/20261002000000_init.sql`.
+2. **SQL Editor** : exécutez dans l'ordre `supabase/migrations/20261002000000_init.sql`, puis
+   `supabase/migrations/20261019000000_planning.sql` (ce second fichier peut être relancé sans risque).
    > ⚠️ Si une **ancienne version** a déjà été installée, exécutez d'abord `supabase/reset.sql`. Il efface
    > les données de l'application ; les comptes de connexion sont conservés.
 3. **Authentication → Sign In / Providers** : désactivez « Allow new users to sign up ».

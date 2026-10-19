@@ -8,11 +8,20 @@ import { useAuth } from '../../context/AuthContext';
 import { adminUsers, fetchProfiles, fetchVehicles, vehicleLabel } from '../../lib/data';
 import { ALERT_LEVEL, ROLE_LABELS, options } from '../../lib/labels';
 import { ROLE_ACCESS } from '../../lib/roles';
+import { moduleOn } from '../../lib/config';
 import { errorMessage, supabase } from '../../lib/supabase';
 import type { Echeance, Profile, Role } from '../../lib/types';
 import { must, useAsync } from '../../lib/useAsync';
 
 const RANK = { expire: 0, urgent: 1, bientot: 2, ok: 3 };
+
+/** Profils proposés selon les modules actifs. */
+const ROLES_VISIBLES = (Object.keys(ROLE_LABELS) as Role[]).filter((r) => {
+  if (r === 'acheteur' || r === 'demandeur') return moduleOn('achats');
+  if (r === 'magasinier') return moduleOn('magasin');
+  if (r === 'exploitation') return moduleOn('bennes');
+  return true;
+});
 
 export default function Users() {
   const { profile: me, reloadProfile } = useAuth();
@@ -47,11 +56,13 @@ export default function Users() {
       { name: 'username', label: 'Identifiant de connexion', required: true, hint: 'Ex. ahmed.b — ou une adresse e-mail professionnelle' } as FieldDef,
       { name: 'password', label: 'Mot de passe', required: true, hint: '6 caractères minimum' } as FieldDef,
     ] : []),
-    { name: 'role', label: 'Profil d\'accès', type: 'select', options: options(ROLE_LABELS), required: true, disabled: self, hint: self ? 'Vous ne pouvez pas changer votre propre profil' : undefined },
+    { name: 'role', label: 'Profil d\'accès', type: 'select', options: options(ROLE_LABELS).filter(([k]) => ROLES_VISIBLES.includes(k)), required: true, disabled: self, hint: self ? 'Vous ne pouvez pas changer votre propre profil' : undefined },
     { name: 'service', label: 'Service', placeholder: 'Production, déchets, administration…' },
     { name: 'phone', label: 'Téléphone', type: 'tel' },
+    ...(moduleOn('achats') ? [
     { name: 'manager_id', label: 'Responsable hiérarchique', type: 'select', options: (data?.profiles ?? []).filter((p) => p.active).map((p) => [p.id, `${p.full_name} (${ROLE_LABELS[p.role]})`]), hint: 'Valide ses demandes d\'achat' },
     { name: 'demandeur_autorise', label: 'Demandeur autorisé (peut émettre des demandes d\'achat)', type: 'checkbox', full: true },
+    ] as FieldDef[] : []),
     ...(!creation ? [{ name: 'password', label: 'Nouveau mot de passe', hint: 'Laisser vide pour ne pas changer' } as FieldDef] : []),
   ];
 
@@ -80,7 +91,7 @@ export default function Users() {
       {showMatrix && (
         <Card title="Matrice des accès par profil">
           <Table head={['Profil', 'Accès']}>
-            {(Object.keys(ROLE_LABELS) as Role[]).map((r) => <tr key={r}><Td className="whitespace-nowrap font-medium">{ROLE_LABELS[r]}</Td><Td>{ROLE_ACCESS[r]}</Td></tr>)}
+            {ROLES_VISIBLES.map((r) => <tr key={r}><Td className="whitespace-nowrap font-medium">{ROLE_LABELS[r]}</Td><Td>{ROLE_ACCESS[r]}</Td></tr>)}
           </Table>
           <p className="mt-2 text-xs text-slate-500">« Demandeur autorisé » peut être coché pour n'importe quel profil (ex. chef d'équipe production) afin de l'ajouter à la liste des demandeurs d'achat.</p>
         </Card>
@@ -97,8 +108,8 @@ export default function Users() {
               { key: 'username', label: 'Identifiant', value: (p) => p.username ?? '' },
               { key: 'role', label: 'Profil', value: (p) => ROLE_LABELS[p.role], render: (p) => <Badge tone={p.role === 'admin' ? 'red' : p.role === 'chauffeur' ? 'gray' : p.role === 'direction' ? 'violet' : 'blue'}>{ROLE_LABELS[p.role]}</Badge> },
               { key: 'service', label: 'Service', value: (p) => p.service ?? '' },
-              { key: 'manager', label: 'Responsable', value: (p) => (p.manager_id ? data.pmap.get(p.manager_id)?.full_name ?? '' : '') },
-              { key: 'da', label: 'DA', value: (p) => (p.demandeur_autorise || ['admin', 'direction', 'acheteur', 'magasinier', 'responsable_flotte', 'demandeur'].includes(p.role) ? 'Oui' : 'Non') },
+              ...(!moduleOn('achats') ? [] : [{ key: 'manager', label: 'Responsable', value: (p: Profile) => (p.manager_id ? data.pmap.get(p.manager_id)?.full_name ?? '' : '') },
+              { key: 'da', label: 'DA', value: (p: Profile) => (p.demandeur_autorise || ['admin', 'direction', 'acheteur', 'magasinier', 'responsable_flotte', 'demandeur'].includes(p.role) ? 'Oui' : 'Non') }]),
               { key: 'vehicule', label: 'Véhicule', value: (p) => data.vehicles.filter((v) => v.chauffeur_id === p.id).map(vehicleLabel).join(', ') },
               { key: 'papiers', label: 'Papiers', value: (p) => data.worst.get(p.id)?.niveau ?? '', render: (p) => {
                 const w = data.worst.get(p.id);

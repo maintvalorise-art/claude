@@ -2,12 +2,21 @@ import { useState } from 'react';
 import { Button, Card, ErrorBox, Input, PageHeader, Spinner, SuccessBox, Table, Td } from '../../components/ui';
 import { fetchControlItems } from '../../lib/data';
 import { errorMessage, supabase } from '../../lib/supabase';
-import type { ControlItem, Parametre } from '../../lib/types';
+import type { ControlItem, Module, Parametre } from '../../lib/types';
+import { moduleOn } from '../../lib/config';
 import { must, useAsync } from '../../lib/useAsync';
+
+const PARAM_MODULE: Record<string, Module> = {
+  seuil_validation_direction: 'achats',
+  seuil_trois_devis: 'achats',
+  contrat_alerte_jours: 'achats',
+  benne_immobile_jours: 'bennes',
+};
 
 export default function Settings() {
   const items = useAsync(() => fetchControlItems(true));
-  const params = useAsync(async () => must(await supabase.from('parametres').select('*').order('cle')) as Parametre[]);
+  const params = useAsync(async () => (must(await supabase.from('parametres').select('*').order('cle')) as Parametre[])
+    .filter((p) => moduleOn(PARAM_MODULE[p.cle] ?? 'flotte')));
   const [draft, setDraft] = useState({ categorie: '', label_fr: '', label_ar: '' });
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -36,7 +45,7 @@ export default function Settings() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Paramètres" subtitle="Seuils du circuit achats, alertes et fiche de contrôle" />
+      <PageHeader title="Paramètres" subtitle="Seuils d'alerte et points de la fiche de contrôle" />
       <SuccessBox>{msg}</SuccessBox>
       <ErrorBox>{error}</ErrorBox>
       <Card title="Seuils et alertes">

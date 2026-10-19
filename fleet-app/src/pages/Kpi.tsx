@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { moduleOn } from '../lib/config';
 import { Card, ErrorBox, Field, Input, PageHeader, Spinner, StatCard } from '../components/ui';
 import { daysAgoIso, fmtMoney, fmtNumber, todayIso } from '../lib/format';
 import { supabase } from '../lib/supabase';
@@ -19,7 +20,7 @@ export default function Kpi() {
     <div className="space-y-5">
       <PageHeader
         title="Indicateurs de performance"
-        subtitle="Achats, magasin, flotte et bennes"
+        subtitle={moduleOn('achats') ? 'Achats, magasin, flotte et bennes' : 'Fleet management'}
         actions={
           <div className="flex items-end gap-2 print:hidden">
             <Field label="Du"><Input type="date" value={debut} onChange={(e) => setDebut(e.target.value)} /></Field>
@@ -29,6 +30,7 @@ export default function Kpi() {
       />
       {loading ? <Spinner /> : error || !data ? <ErrorBox>{error}</ErrorBox> : (
         <>
+          {moduleOn('achats') && (
           <Section title="🛒 Achats" hint="Mensuel / trimestriel">
             <StatCard label="Demandes d'achat" value={data.achats.nb_da} />
             <StatCard label="Délai moyen DA → commande" value={data.achats.delai_moyen_commande_h == null ? '—' : `${fmtNumber(data.achats.delai_moyen_commande_h, 1)} h`} tone="blue" />
@@ -38,6 +40,8 @@ export default function Kpi() {
             <StatCard label="Économies négociées" value={fmtMoney(data.achats.economies_negociees)} tone="green" hint="Estimé − commandé" />
             <StatCard label="Montant commandé" value={fmtMoney(data.achats.montant_commande)} />
           </Section>
+          )}
+          {moduleOn('magasin') && (
           <Section title="📦 Spare parts" hint="Mensuel">
             <StatCard label="Ruptures sur pièces A" value={data.magasin.ruptures_a} tone={data.magasin.ruptures_a ? 'red' : 'green'} />
             <StatCard label="Articles sous stock min" value={data.magasin.sous_minimum} tone={data.magasin.sous_minimum ? 'amber' : 'green'} />
@@ -45,6 +49,8 @@ export default function Kpi() {
             <StatCard label="Fiabilité d'inventaire" value={pct(data.magasin.fiabilite_inventaire)} tone={tone(data.magasin.fiabilite_inventaire, 95)} hint="Dernier inventaire clôturé" />
             <StatCard label="Articles dormants (6 mois)" value={data.magasin.articles_dormants} />
           </Section>
+          )}
+          {moduleOn('flotte') && (
           <Section title="🚚 Fleet" hint="Mensuel / hebdomadaire">
             <StatCard label="Disponibilité du parc" value={pct(data.flotte.disponibilite_pct)} tone={tone(data.flotte.disponibilite_pct, 90)} hint={`${data.flotte.nb_vehicules} véhicule(s)`} />
             <StatCard label="Coût de maintenance" value={fmtMoney(data.flotte.cout_maintenance)} hint={data.flotte.nb_vehicules ? `${fmtMoney(data.flotte.cout_maintenance / data.flotte.nb_vehicules)} / véhicule` : undefined} />
@@ -55,6 +61,8 @@ export default function Kpi() {
             <StatCard label="Documents expirés" value={data.flotte.documents_expires} tone={data.flotte.documents_expires ? 'red' : 'green'} />
             <StatCard label="Fiches de contrôle réalisées" value={pct(data.flotte.taux_fiches_controle)} tone={tone(data.flotte.taux_fiches_controle, 100)} hint="Véhicules attribués, période en cours" />
           </Section>
+          )}
+          {moduleOn('bennes') && (
           <Section title="🗑 Bennes" hint="Mensuel">
             <StatCard label="Bennes chez les clients" value={`${data.bennes.chez_client} / ${data.bennes.nb_bennes}`} tone="blue" />
             <StatCard label="Disponibles au dépôt" value={data.bennes.au_depot} tone="green" />
@@ -62,6 +70,7 @@ export default function Kpi() {
             <StatCard label="Durée moyenne chez client" value={data.bennes.duree_moyenne_client_j == null ? '—' : `${fmtNumber(data.bennes.duree_moyenne_client_j, 1)} j`} />
             <StatCard label="Non localisées (> 30 j)" value={data.bennes.non_localisees} tone={data.bennes.non_localisees ? 'red' : 'green'} />
           </Section>
+          )}
         </>
       )}
     </div>

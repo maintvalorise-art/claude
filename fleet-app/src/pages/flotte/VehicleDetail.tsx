@@ -12,6 +12,7 @@ import {
   ACCIDENT_STATUS, DESTINATION_LABELS, INTERVENTION_STATUS, INTERVENTION_TYPE_LABELS, PLAN_TYPE_LABELS,
   VEHICLE_STATUS, VEHICLE_TYPE_LABELS, options,
 } from '../../lib/labels';
+import { moduleOn } from '../../lib/config';
 import { can } from '../../lib/roles';
 import { supabase } from '../../lib/supabase';
 import type {
@@ -90,7 +91,7 @@ export default function VehicleDetail() {
 
   const tabs: [Tab, string][] = [
     ['papiers', 'Papiers'], ['maintenance', `Maintenance (${data.inter.length})`], ['pneus', `Pneus (${data.pneus.filter((p) => p.statut === 'monte').length})`],
-    ['pieces', `Pièces (${data.pieces.length})`], ['gasoil', `Gasoil (${data.pleins.length})`], ['trajets', `Trajets (${data.trajets.length})`],
+    ...(moduleOn('magasin') ? [['pieces', `Pièces (${data.pieces.length})`] as [Tab, string]] : []), ['gasoil', `Gasoil (${data.pleins.length})`], ['trajets', `Trajets (${data.trajets.length})`],
     ['accidents', `Accidents (${data.accidents.length})`], ['fiches', `Fiches (${data.fiches.length})`], ['historique', 'Historique'],
   ];
 

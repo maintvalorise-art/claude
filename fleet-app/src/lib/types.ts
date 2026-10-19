@@ -564,3 +564,19 @@ export interface Kpis {
     taux_rotation: number | null; duree_moyenne_client_j: number | null; non_localisees: number;
   };
 }
+
+export interface PlanningRow {
+  id: string;
+  date_prevue: string;
+  titre: string;
+  type: 'document' | 'maintenance' | 'autre';
+  document_id: string | null;
+  plan_id: string | null;
+  vehicle_id: string | null;
+  chauffeur_id: string | null;
+  statut: 'planifie' | 'fait' | 'annule';
+  notes: string | null;
+  cree_par: string | null;
+  fait_le: string | null;
+  created_at: string;
+}

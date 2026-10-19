@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ROLE_LABELS } from '../lib/labels';
+import { MODULES_ACTIFS, moduleOn } from '../lib/config';
 import { can, canRequestPurchase, type Permission } from '../lib/roles';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../lib/types';
@@ -25,17 +26,17 @@ function buildNav(p: Profile, alertes: number, hasTeam: boolean): NavSection[] {
       { to: '/mes-demandes', label: "Demande d'intervention", icon: '🔧' },
       { to: '/plein', label: 'Plein gasoil', icon: '⛽' },
       { to: '/trajet', label: 'Trajet', icon: '🛣' },
-      ...(has('bennesMouvement') ? [{ to: '/bennes/mouvement', label: 'Scanner une benne', icon: '📦' }] : []),
+      ...(moduleOn('bennes') && has('bennesMouvement') ? [{ to: '/bennes/mouvement', label: 'Scanner une benne', icon: '📦' }] : []),
       { to: '/accident', label: 'Déclarer un accident', icon: '⚠️' },
       ...(p.role === 'chauffeur' ? [{ to: '/mes-fiches', label: 'Mes fiches', icon: '✅' }] : []),
     ] });
   }
   const achats: NavItem[] = [];
-  if (canRequestPurchase(p) || has('achatsVoirTout') || hasTeam) achats.push({ to: '/achats', label: "Demandes d'achat", icon: '🛒' });
-  if (has('fournisseursVoir')) achats.push({ to: '/fournisseurs', label: 'Fournisseurs & termes', icon: '🏢' });
+  if (moduleOn('achats') && (canRequestPurchase(p) || has('achatsVoirTout') || hasTeam)) achats.push({ to: '/achats', label: "Demandes d'achat", icon: '🛒' });
+  if (moduleOn('achats') && has('fournisseursVoir')) achats.push({ to: '/fournisseurs', label: 'Fournisseurs & termes', icon: '🏢' });
   if (achats.length) sections.push({ title: 'Achats', items: achats });
 
-  if (has('magasinVoir')) {
+  if (moduleOn('magasin') && has('magasinVoir')) {
     sections.push({ title: 'Magasin · Spare parts', items: [
       { to: '/magasin', label: 'Articles & stock', icon: '📦' },
       ...(has('magasinGerer') ? [{ to: '/magasin/mouvement', label: 'Entrée / sortie (scan)', icon: '🔁' }] : []),
@@ -43,18 +44,20 @@ function buildNav(p: Profile, alertes: number, hasTeam: boolean): NavSection[] {
       ...(has('magasinGerer') || p.role === 'direction' ? [{ to: '/magasin/inventaires', label: 'Inventaires', icon: '🧮' }] : []),
     ] });
   }
-  if (has('flotteVoir')) {
+  if (moduleOn('flotte') && has('flotteVoir')) {
     sections.push({ title: 'Fleet management', items: [
       { to: '/vehicules', label: 'Véhicules & engins', icon: '🚚' },
+      { to: '/planning', label: 'Planning (calendrier)', icon: '🗓' },
       { to: '/echeances', label: 'Papiers & échéances', icon: '📅' },
-      { to: '/interventions', label: 'Maintenance', icon: '🛠' },
+      { to: '/interventions', label: 'Maintenance en cours', icon: '🛠' },
+      { to: '/historique-maintenance', label: 'Historique maintenance', icon: '📚' },
       { to: '/fiches', label: 'Fiches de contrôle', icon: '✅' },
       { to: '/accidents', label: 'Accidents', icon: '🚨' },
       { to: '/gasoil', label: 'Gasoil', icon: '⛽' },
       { to: '/trajets', label: 'Trajets', icon: '🛣' },
     ] });
   }
-  if (has('bennesVoir')) {
+  if (moduleOn('bennes') && has('bennesVoir')) {
     sections.push({ title: 'Bennes', items: [
       { to: '/bennes', label: 'Parc de bennes', icon: '🗑' },
       { to: '/clients', label: 'Clients', icon: '🏭' },
@@ -84,7 +87,7 @@ export default function Layout() {
     if (!profile) return;
     let cancelled = false;
     Promise.all([
-      supabase.from('v_alertes').select('ref_id', { count: 'exact', head: true }).in('niveau', ['expire', 'urgent']),
+      supabase.from('v_alertes').select('ref_id', { count: 'exact', head: true }).in('niveau', ['expire', 'urgent']).in('module', [...MODULES_ACTIFS]),
       supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('manager_id', profile.id),
     ]).then(([a, t]) => {
       if (cancelled) return;
@@ -161,7 +164,7 @@ export default function Layout() {
         </div>
       )}
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 print:max-w-none print:p-0">
+      <main className="mx-auto w-full min-w-0 max-w-6xl flex-1 px-4 py-6 sm:px-6 print:max-w-none print:p-0">
         <Outlet />
       </main>
     </div>
@@ -174,7 +177,7 @@ function Brand() {
       <img src="/favicon.svg" alt="" className="h-8 w-8" />
       <div className="leading-tight">
         <div className="font-bold">Valorise Maroc</div>
-        <div className="text-xs text-slate-400">Achats · Magasin · Flotte · Bennes</div>
+        <div className="text-xs text-slate-400">{moduleOn('achats') ? 'Achats · Magasin · Flotte · Bennes' : 'Fleet management'}</div>
       </div>
     </div>
   );

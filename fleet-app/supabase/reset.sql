@@ -11,7 +11,7 @@ drop view if exists public.v_alertes, public.v_da_delais, public.v_fournisseurs_
   public.v_plans_maintenance, public.v_echeances cascade;
 
 drop table if exists
-  public.inventaire_lignes, public.inventaires, public.mouvements_stock, public.trajets,
+  public.planning, public.inventaire_lignes, public.inventaires, public.mouvements_stock, public.trajets,
   public.mouvements_bennes, public.bennes, public.clients, public.pleins, public.accidents,
   public.control_results, public.control_sheets, public.control_items, public.interventions,
   public.prix_historique, public.evaluations_fournisseurs, public.da_historique, public.devis,
@@ -28,7 +28,8 @@ drop function if exists
   public.mouvements_bennes_after, public.mouvements_stock_before, public.mouvements_stock_after,
   public.list_drivers, public.vehicle_last_driver, public.submit_control_sheet,
   public.creer_demande_achat, public.da_action, public.demarrer_inventaire,
-  public.cloturer_inventaire, public.kpis cascade;
+  public.cloturer_inventaire, public.kpis, public.planning_before,
+  public.documents_planning_done, public.plans_planning_done cascade;
 
 drop type if exists public.user_role, public.vehicle_type, public.vehicle_status, public.document_type,
   public.intervention_type, public.intervention_priority, public.intervention_status cascade;

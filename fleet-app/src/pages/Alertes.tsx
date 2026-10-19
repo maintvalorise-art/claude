@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../components/DataTable';
 import { Card, ErrorBox, PageHeader, Select, Spinner, StatusBadge } from '../components/ui';
+import { MODULES_ACTIFS } from '../lib/config';
 import { ALERT_LEVEL, MODULE_LABELS, alerteTitre, options } from '../lib/labels';
 import { supabase } from '../lib/supabase';
 import type { AlertLevel, Alerte, Module } from '../lib/types';
@@ -13,7 +14,7 @@ export default function Alertes() {
   const navigate = useNavigate();
   const [module, setModule] = useState<Module | ''>('');
   const [niveau, setNiveau] = useState<AlertLevel | ''>('');
-  const { data, loading, error } = useAsync(async () => must(await supabase.from('v_alertes').select('*')) as Alerte[]);
+  const { data, loading, error } = useAsync(async () => (must(await supabase.from('v_alertes').select('*')) as Alerte[]).filter((a) => MODULES_ACTIFS.has(a.module)));
 
   const list = useMemo(
     () => (data ?? [])
@@ -26,7 +27,7 @@ export default function Alertes() {
     <div>
       <PageHeader
         title="Alertes"
-        subtitle="Papiers, maintenance, stock min, retards fournisseurs, consommation anormale, bennes immobiles…"
+        subtitle="Papiers, maintenance, planning, fiches de contrôle, consommation anormale…"
       />
       <Card>
         {loading ? <Spinner /> : error ? <ErrorBox>{error}</ErrorBox> : (
@@ -39,7 +40,7 @@ export default function Alertes() {
               <>
                 <Select className="w-40" value={module} onChange={(e) => setModule(e.target.value as Module | '')}>
                   <option value="">Tous les modules</option>
-                  {options(MODULE_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  {options(MODULE_LABELS).filter(([k]) => MODULES_ACTIFS.has(k)).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
                 </Select>
                 <Select className="w-36" value={niveau} onChange={(e) => setNiveau(e.target.value as AlertLevel | '')}>
                   <option value="">Tous niveaux</option>

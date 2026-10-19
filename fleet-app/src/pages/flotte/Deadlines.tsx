@@ -47,7 +47,12 @@ export default function Deadlines() {
       <PageHeader
         title="Papiers & échéances"
         subtitle="Alerte 30 jours et 7 jours avant expiration (délai réglable par papier)"
-        actions={gerer && <Button onClick={() => setAdding(true)}>+ Ajouter un papier</Button>}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => navigate('/planning')}>🗓 Planifier dans le calendrier</Button>
+            {gerer && <Button onClick={() => setAdding(true)}>+ Ajouter un papier</Button>}
+          </>
+        }
       />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(['expire', 'urgent', 'bientot', 'ok'] as AlertLevel[]).map((n) => (

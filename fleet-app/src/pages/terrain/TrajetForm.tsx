@@ -8,6 +8,7 @@ import { DESTINATION_LABELS, options } from '../../lib/labels';
 import { errorMessage, supabase } from '../../lib/supabase';
 import type { Benne, DestinationType } from '../../lib/types';
 import { useAsync } from '../../lib/useAsync';
+import { moduleOn } from '../../lib/config';
 import { Done, L, defaultVehicle } from './shared';
 
 export default function TrajetForm() {
@@ -91,7 +92,7 @@ export default function TrajetForm() {
               {options(DESTINATION_LABELS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </Select>
           </Field>
-          {type === 'client' && (
+          {type === 'client' && data.clients.length > 0 && (
             <Field label={<L fr="Client" ar="الزبون" />}>
               <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
                 <option value="">—</option>
@@ -106,6 +107,7 @@ export default function TrajetForm() {
               <Input type="number" inputMode="numeric" min={Number(kmDep) || 0} value={kmArr} onChange={(e) => setKmArr(e.target.value)} required />
             </Field>
           </div>
+          {moduleOn('bennes') && (
           <Field label={<L fr="Benne transportée (scan)" ar="الحاوية" />}>
             <ScanInput autoFocus={false} placeholder="Scanner le QR de la benne…" onScan={(code) => {
               const b = data.bennes.find((x) => x.code_barres === code || x.numero === code);
@@ -117,6 +119,7 @@ export default function TrajetForm() {
               {data.bennes.map((b) => <option key={b.id} value={b.id}>{b.numero}</option>)}
             </Select>
           </Field>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label={<L fr="Poids (kg)" ar="الوزن" />}><Input type="number" inputMode="decimal" min={0} value={poids} onChange={(e) => setPoids(e.target.value)} /></Field>
             <Field label={<L fr="Ticket pont bascule" ar="تذكرة الميزان" />}><Input value={ticket} onChange={(e) => setTicket(e.target.value)} /></Field>

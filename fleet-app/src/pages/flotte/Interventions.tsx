@@ -7,6 +7,7 @@ import { useAuth } from '../../context/AuthContext';
 import { byId, fetchArticles, fetchPeople, fetchVehicles, vehicleLabel } from '../../lib/data';
 import { fmtDateTime, fmtMoney, fmtNumber } from '../../lib/format';
 import { INTERVENTION_STATUS, INTERVENTION_TYPE_LABELS, PRIORITY, options } from '../../lib/labels';
+import { moduleOn } from '../../lib/config';
 import { can } from '../../lib/roles';
 import { errorMessage, supabase } from '../../lib/supabase';
 import type { Article, Intervention, InterventionStatus, InterventionType, MouvementStock, Priority, Vehicle } from '../../lib/types';
@@ -108,6 +109,7 @@ function ManageIntervention({ item, vehicle, demandeur, gerer, onDone }: { item:
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: pieces } = useAsync(async () => {
+    if (!moduleOn('magasin')) return { mv: [] as MouvementStock[], amap: new Map<string, Article>() };
     const [mv, articles] = await Promise.all([
       supabase.from('mouvements_stock').select('*').eq('intervention_id', item.id).then((r) => (r.data ?? []) as MouvementStock[]),
       fetchArticles(false),
