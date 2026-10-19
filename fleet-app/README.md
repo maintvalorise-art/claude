@@ -5,7 +5,9 @@ Management ».
 
 > **Affichage actuel : Fleet management uniquement** (avec l'espace terrain des chauffeurs). Les modules Achats,
 > Magasin et Bennes restent dans la base mais sont masqués. Pour les réafficher, définissez la variable
-> `VITE_MODULES=flotte,achats,magasin,bennes` (Vercel → Environment Variables), puis faites Redeploy. Les quatre modules partagent la même base **Supabase** (articles, fournisseurs, équipements,
+> `VITE_MODULES=flotte,achats,magasin,bennes` (Vercel → Environment Variables), puis faites Redeploy.
+
+Les quatre modules partagent la même base **Supabase** (articles, fournisseurs, équipements,
 bennes). Chaque profil n'accède qu'à son module, et ces droits sont appliqués **dans la base**
 (Row Level Security), pas seulement dans l'interface.
 
