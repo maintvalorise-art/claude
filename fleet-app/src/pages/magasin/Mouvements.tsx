@@ -16,8 +16,11 @@ export default function Mouvements() {
   const [vehicleId, setVehicleId] = useState('');
 
   const refs = useAsync(async () => {
-    const [articles, vehicles, people] = await Promise.all([fetchArticles(false), fetchVehicles(false), fetchPeople()]);
-    return { amap: byId(articles), vehicles, vmap: byId(vehicles), names: new Map(people.map((p) => [p.id, p.full_name])) };
+    const [articles, vehicles, people, bons] = await Promise.all([
+      fetchArticles(false), fetchVehicles(false), fetchPeople(),
+      supabase.from('bons_stock').select('id, numero').then((r) => (r.data ?? []) as { id: string; numero: string }[]),
+    ]);
+    return { amap: byId(articles), vehicles, vmap: byId(vehicles), names: new Map(people.map((p) => [p.id, p.full_name])), bons: new Map(bons.map((b) => [b.id, b.numero])) };
   });
   const mv = useAsync(async () => must(await supabase.from('mouvements_stock').select('*')
     .gte('created_at', debut).lt('created_at', new Date(new Date(fin).getTime() + 864e5).toISOString())
@@ -82,6 +85,8 @@ export default function Mouvements() {
               { key: 'valeur', label: 'Valeur', value: (m) => m.quantite * (m.prix_unitaire ?? 0), render: (m) => fmtMoney(m.quantite * (m.prix_unitaire ?? 0)) },
               { key: 'motif', label: 'Motif', value: (m) => MOUVEMENT_MOTIF[m.motif] ?? m.motif },
               { key: 'pour', label: 'Pour', value: (m) => [m.vehicle_id ? vehicleLabel(refs.data!.vmap.get(m.vehicle_id)) : m.equipement, m.demandeur].filter(Boolean).join(' · ') },
+              { key: 'bon', label: 'Bon', value: (m) => (m.bon_id ? refs.data!.bons.get(m.bon_id) ?? '' : ''), render: (m) => (m.bon_id
+                ? <Link className="whitespace-nowrap font-mono text-sky-700 underline" to={`/magasin/bons/${m.bon_id}`}>{refs.data!.bons.get(m.bon_id) ?? 'Bon'}</Link> : '') },
               { key: 'auteur', label: 'Par', value: (m) => (m.auteur_id ? refs.data!.names.get(m.auteur_id) ?? '' : '') },
             ]}
           />

@@ -8,6 +8,7 @@ import { byId, fetchPeople, fetchVehicles, vehicleLabel } from '../../lib/data';
 import { fmtDate, fmtDateTime, fmtMoney, fmtNumber } from '../../lib/format';
 import { ARTICLE_CATEGORIE, CRITICITE, DA_STATUT, MOUVEMENT_MOTIF, MOUVEMENT_TYPE } from '../../lib/labels';
 import { can } from '../../lib/roles';
+import { libelleEmplacement, parseEmplacement } from '../../lib/stock';
 import { supabase } from '../../lib/supabase';
 import type { Article, DemandeAchat, Fournisseur, MouvementStock, PrixHistorique } from '../../lib/types';
 import { must, useAsync } from '../../lib/useAsync';
@@ -49,7 +50,7 @@ export default function ArticleDetail() {
 
   return (
     <div className="space-y-5">
-      <div className="text-sm print:hidden"><Link to="/magasin" className="text-sky-700 hover:underline">← Magasin</Link></div>
+      <div className="text-sm print:hidden"><Link to="/magasin" className="text-sky-700 hover:underline">← Gestion de stock</Link></div>
       <PageHeader
         title={<span className="flex flex-wrap items-center gap-3">{a.code} <StatusBadge map={CRITICITE} value={a.criticite} />{!a.actif && <Badge>Inactif</Badge>}</span>}
         subtitle={`${a.designation} · ${ARTICLE_CATEGORIE[a.categorie]}`}
@@ -64,7 +65,11 @@ export default function ArticleDetail() {
         <Card><Info label="Stock actuel"><span className={a.stock_actuel < a.stock_min ? 'text-red-600' : ''}>{fmtNumber(a.stock_actuel)} {a.unite}</span></Info><p className="text-xs text-slate-500">min {fmtNumber(a.stock_min)} · max {fmtNumber(a.stock_max)}</p></Card>
         <Card><Info label="Valeur">{fmtMoney(a.stock_actuel * (a.prix_unitaire ?? 0))}</Info><p className="text-xs text-slate-500">PU {fmtMoney(a.prix_unitaire)}</p></Card>
         <Card><Info label="Consommation 12 mois">{fmtNumber(conso)} {a.unite}</Info><p className="text-xs text-slate-500">{sorties12m.length} sortie(s)</p></Card>
-        <Card><Info label="Emplacement">{a.emplacement}</Info><p className="text-xs text-slate-500">Code-barres : {a.code_barres ?? a.code}</p></Card>
+        <Card>
+          <Info label="Emplacement">{libelleEmplacement(a.emplacement) || '—'}</Info>
+          {parseEmplacement(a.emplacement) && <Link to={`/magasin/3d?article=${a.id}`} className="text-sm font-semibold text-sky-700 underline print:hidden">📍 Voir dans le magasin 3D</Link>}
+          <p className="text-xs text-slate-500">Code-barres : {a.code_barres ?? a.code}</p>
+        </Card>
       </div>
       <Card>
         <dl className="grid gap-4 text-sm sm:grid-cols-3">

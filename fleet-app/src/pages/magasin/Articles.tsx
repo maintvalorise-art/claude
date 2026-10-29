@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import DataTable from '../../components/DataTable';
 import EntityForm from '../../components/EntityForm';
 import { Badge, Button, Card, ErrorBox, Modal, PageHeader, Select, Spinner, StatCard, StatusBadge } from '../../components/ui';
@@ -8,6 +8,7 @@ import { byId, fetchArticles, fetchVehicles, vehicleLabel } from '../../lib/data
 import { fmtMoney, fmtNumber } from '../../lib/format';
 import { ARTICLE_CATEGORIE, CRITICITE, options } from '../../lib/labels';
 import { can } from '../../lib/roles';
+import { parseEmplacement } from '../../lib/stock';
 import { supabase } from '../../lib/supabase';
 import type { ArticleCategorie, Criticite, Fournisseur } from '../../lib/types';
 import { useAsync } from '../../lib/useAsync';
@@ -46,14 +47,20 @@ export default function Articles() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Magasin · Pièces de rechange"
-        subtitle="Référentiel codifié, stock min/max, criticité A/B/C"
-        actions={gerer && (
+        title="Gestion de stock · Articles et quantités"
+        subtitle="Stock en temps réel, emplacement dans le magasin, stock min/max, criticité A/B/C"
+        actions={
           <>
-            <Button variant="secondary" onClick={() => navigate('/magasin/mouvement')}>🔁 Entrée / sortie</Button>
-            <Button onClick={() => setAdding(true)}>+ Nouvel article</Button>
+            <Button variant="secondary" onClick={() => navigate('/magasin/3d')}>🏬 Magasin 3D</Button>
+            {gerer && (
+              <>
+                <Button variant="secondary" onClick={() => navigate('/magasin/bon/reception')}>⬇ Réception</Button>
+                <Button variant="secondary" onClick={() => navigate('/magasin/bon/livraison')}>⬆ Livraison</Button>
+                <Button onClick={() => setAdding(true)}>+ Nouvel article</Button>
+              </>
+            )}
           </>
-        )}
+        }
       />
       {data && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -95,7 +102,9 @@ export default function Articles() {
               { key: 'categorie', label: 'Catégorie', value: (a) => ARTICLE_CATEGORIE[a.categorie] },
               { key: 'criticite', label: 'Crit.', render: (a) => <StatusBadge map={CRITICITE} value={a.criticite} /> },
               { key: 'equipement', label: 'Équipement', value: (a) => (a.vehicle_id ? vehicleLabel(data.vmap.get(a.vehicle_id)) : a.equipement) ?? '' },
-              { key: 'emplacement', label: 'Emplacement', value: (a) => a.emplacement ?? '' },
+              { key: 'emplacement', label: 'Emplacement', value: (a) => a.emplacement ?? '', render: (a) => (parseEmplacement(a.emplacement)
+                ? <Link to={`/magasin/3d?article=${a.id}`} onClick={(e) => e.stopPropagation()} className="whitespace-nowrap font-mono text-sky-700 underline" title="Voir dans le magasin 3D">📍 {a.emplacement}</Link>
+                : <span className="text-xs text-slate-500">{a.emplacement ?? '—'}</span>) },
               { key: 'stock', label: 'Stock', value: (a) => a.stock_actuel, render: (a) => (
                 <span className="whitespace-nowrap">
                   <b className={a.stock_actuel <= 0 ? 'text-red-600' : a.stock_actuel < a.stock_min ? 'text-amber-600' : ''}>{fmtNumber(a.stock_actuel)}</b>

@@ -73,7 +73,8 @@ export default function Home() {
   if (loading) return <Spinner />;
   if (error || !data) return <ErrorBox>{error}</ErrorBox>;
 
-  const tiles = [
+  type Tile = { to: string; icon: string; fr: string; ar?: string; cls?: string };
+  const terrainTiles: Tile[] = [
     ...(terrain ? [
       { to: '/ma-fiche', icon: '📝', fr: 'Fiche de contrôle', ar: 'ورقة المراقبة', cls: 'bg-slate-900 text-white' },
       { to: '/mes-demandes', icon: '🔧', fr: "Demande d'intervention", ar: 'طلب تدخل', cls: 'bg-amber-500 text-slate-900' },
@@ -84,6 +85,29 @@ export default function Home() {
     ] : []),
     ...(demandeur ? [{ to: '/achats/nouvelle', icon: '🛒', fr: "Nouvelle demande d'achat", ar: 'طلب شراء جديد', cls: 'bg-white text-slate-900 border border-slate-200' }] : []),
   ];
+  const fleetTiles: Tile[] = planif ? [
+    { to: '/vehicules', icon: '🚚', fr: 'Véhicules & engins' },
+    { to: '/planning', icon: '🗓', fr: 'Planning' },
+    { to: '/echeances', icon: '📅', fr: 'Papiers & échéances' },
+    { to: '/interventions', icon: '🛠', fr: 'Maintenance' },
+    { to: '/historique-maintenance', icon: '📚', fr: 'Historique' },
+    ...(can(p, 'kpi') ? [{ to: '/kpi', icon: '📊', fr: 'Pilotage' }] : []),
+  ] : [];
+  const stockTiles: Tile[] = moduleOn('magasin') && can(p, 'magasinVoir') ? [
+    { to: '/magasin', icon: '📦', fr: 'Articles & quantités' },
+    { to: '/magasin/3d', icon: '🏬', fr: 'Magasin 3D' },
+    ...(can(p, 'magasinGerer') ? [
+      { to: '/magasin/bon/reception', icon: '⬇', fr: 'Bon de réception' },
+      { to: '/magasin/bon/livraison', icon: '⬆', fr: 'Bon de livraison' },
+    ] : []),
+    { to: '/magasin/bons', icon: '🧾', fr: 'Bons (A5)' },
+  ] : [];
+  // Sections affichées avec leur titre dès qu'il y a plus d'un espace.
+  const espaces = [
+    { titre: 'Terrain · الميدان', tiles: terrainTiles, big: true },
+    { titre: '🚚 Fleet management', tiles: fleetTiles, big: false },
+    { titre: '📦 Gestion de stock', tiles: stockTiles, big: false },
+  ].filter((e) => e.tiles.length);
 
   const byModule = data.alertes.reduce<Record<string, number>>((acc, a) => ({ ...acc, [a.module]: (acc[a.module] ?? 0) + 1 }), {});
 
@@ -94,17 +118,24 @@ export default function Home() {
         <p className="text-sm text-slate-500">{ROLE_LABELS[p.role]} · {new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}</p>
       </div>
 
-      {tiles.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {tiles.map((t) => (
-            <Link key={t.to} to={t.to} className={`rounded-2xl p-4 shadow-sm hover:opacity-90 ${t.cls}`}>
-              <div className="text-2xl">{t.icon}</div>
-              <div className="mt-1 font-bold">{t.fr}</div>
-              <div className="ar text-sm opacity-80">{t.ar}</div>
-            </Link>
-          ))}
-        </div>
-      )}
+      {espaces.map((e) => (
+        <section key={e.titre}>
+          {espaces.length > 1 && <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-slate-500">{e.titre}</h2>}
+          <div className={e.big ? 'grid grid-cols-2 gap-3 sm:grid-cols-3' : 'grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6'}>
+            {e.tiles.map((t) => (
+              <Link
+                key={t.to}
+                to={t.to}
+                className={e.big ? `rounded-2xl p-4 shadow-sm hover:opacity-90 ${t.cls}` : 'rounded-xl border border-slate-200 bg-white p-3 shadow-sm hover:border-slate-400'}
+              >
+                <div className={e.big ? 'text-2xl' : 'text-xl'}>{t.icon}</div>
+                <div className={e.big ? 'mt-1 font-bold' : 'mt-1 text-sm font-semibold'}>{t.fr}</div>
+                {t.ar && <div className="ar text-sm opacity-80">{t.ar}</div>}
+              </Link>
+            ))}
+          </div>
+        </section>
+      ))}
 
       {data.stats.length > 0 && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

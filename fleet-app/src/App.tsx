@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { Suspense, lazy, type ReactNode } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from './components/Layout';
 import { Spinner } from './components/ui';
@@ -29,6 +29,9 @@ import MouvementForm from './pages/magasin/MouvementForm';
 import Mouvements from './pages/magasin/Mouvements';
 import Inventaires from './pages/magasin/Inventaires';
 import InventaireDetail from './pages/magasin/InventaireDetail';
+import Bons from './pages/magasin/Bons';
+import BonForm from './pages/magasin/BonForm';
+import BonDetail from './pages/magasin/BonDetail';
 import Vehicles from './pages/flotte/Vehicles';
 import VehicleDetail from './pages/flotte/VehicleDetail';
 import Deadlines from './pages/flotte/Deadlines';
@@ -46,6 +49,9 @@ import Planning from './pages/flotte/Planning';
 import HistoriqueMaintenance from './pages/flotte/HistoriqueMaintenance';
 import Users from './pages/admin/Users';
 import Settings from './pages/admin/Settings';
+
+// La vue 3D (three.js) n'est chargée qu'à l'ouverture de la page.
+const Magasin3D = lazy(() => import('./pages/magasin/Magasin3D'));
 
 export default function App() {
   const { session, profile, loading, signOut } = useAuth();
@@ -100,7 +106,11 @@ export default function App() {
         <Route path="fournisseurs" element={mod('achats', guard('fournisseursVoir', <Fournisseurs />))} />
         <Route path="fournisseurs/:id" element={mod('achats', guard('fournisseursVoir', <FournisseurDetail />))} />
 
-        {/* Magasin */}
+        {/* Gestion de stock */}
+        <Route path="magasin/3d" element={mod('magasin', guard('magasinVoir', <Suspense fallback={<Spinner label="Chargement du magasin 3D…" />}><Magasin3D /></Suspense>))} />
+        <Route path="magasin/bons" element={mod('magasin', guard('magasinVoir', <Bons />))} />
+        <Route path="magasin/bons/:id" element={mod('magasin', guard('magasinVoir', <BonDetail />))} />
+        <Route path="magasin/bon/:type" element={mod('magasin', guard('magasinGerer', <BonForm />))} />
         <Route path="magasin" element={mod('magasin', guard('magasinVoir', <Articles />))} />
         <Route path="magasin/mouvement" element={mod('magasin', guard('magasinGerer', <MouvementForm />))} />
         <Route path="magasin/mouvements" element={mod('magasin', guard('magasinVoir', <Mouvements />))} />

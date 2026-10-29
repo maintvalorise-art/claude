@@ -505,6 +505,7 @@ export interface MouvementStock {
   motif: string;
   da_id: string | null;
   intervention_id: string | null;
+  bon_id?: string | null;
   auteur_id: string | null;
   commentaire: string | null;
   created_at: string;
@@ -578,5 +579,20 @@ export interface PlanningRow {
   notes: string | null;
   cree_par: string | null;
   fait_le: string | null;
+  created_at: string;
+}
+
+export type BonType = 'reception' | 'livraison';
+export interface BonStock {
+  id: string;
+  numero: string;
+  type: BonType;
+  date_bon: string;
+  tiers: string | null;
+  reference_tiers: string | null;
+  vehicle_id: string | null;
+  demandeur: string | null;
+  commentaire: string | null;
+  auteur_id: string | null;
   created_at: string;
 }

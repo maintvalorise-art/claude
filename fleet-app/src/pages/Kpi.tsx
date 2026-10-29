@@ -19,8 +19,8 @@ export default function Kpi() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Indicateurs de performance"
-        subtitle={moduleOn('achats') ? 'Achats, magasin, flotte et bennes' : 'Fleet management'}
+        title="Pilotage · indicateurs de performance"
+        subtitle={moduleOn('achats') ? 'Achats, magasin, flotte et bennes' : moduleOn('magasin') ? 'Fleet management et gestion de stock' : 'Fleet management'}
         actions={
           <div className="flex items-end gap-2 print:hidden">
             <Field label="Du"><Input type="date" value={debut} onChange={(e) => setDebut(e.target.value)} /></Field>
@@ -42,7 +42,7 @@ export default function Kpi() {
           </Section>
           )}
           {moduleOn('magasin') && (
-          <Section title="📦 Spare parts" hint="Mensuel">
+          <Section title="📦 Gestion de stock" hint="Mensuel">
             <StatCard label="Ruptures sur pièces A" value={data.magasin.ruptures_a} tone={data.magasin.ruptures_a ? 'red' : 'green'} />
             <StatCard label="Articles sous stock min" value={data.magasin.sous_minimum} tone={data.magasin.sous_minimum ? 'amber' : 'green'} />
             <StatCard label="Valeur du stock" value={fmtMoney(data.magasin.valeur_stock)} tone="blue" />

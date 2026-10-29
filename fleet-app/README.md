@@ -3,9 +3,9 @@
 Plateforme unique (PC + téléphone) construite d'après le cahier des charges « Projet Achats, Spare Parts & Fleet
 Management ».
 
-> **Affichage actuel : Fleet management uniquement** (avec l'espace terrain des chauffeurs). Les modules Achats,
-> Magasin et Bennes restent dans la base mais sont masqués. Pour les réafficher, définissez la variable
-> `VITE_MODULES=flotte,achats,magasin,bennes` (Vercel → Environment Variables), puis faites Redeploy.
+> **Affichage actuel : Fleet management et Gestion de stock** (avec l'espace terrain des chauffeurs). Les modules
+> Achats et Bennes restent dans la base mais sont masqués. Pour les réafficher, définissez la variable
+> `VITE_MODULES=flotte,magasin,achats,bennes` (Vercel → Environment Variables), puis faites Redeploy.
 
 Les quatre modules partagent la même base **Supabase** (articles, fournisseurs, équipements,
 bennes). Chaque profil n'accède qu'à son module, et ces droits sont appliqués **dans la base**
@@ -62,6 +62,19 @@ La case **« Demandeur autorisé »** ajoute n'importe quel compte à la liste d
 - **Tableaux de bord** : valeur du stock, articles sous le min, ruptures A, consommation par équipement,
   articles dormants.
 
+### Gestion de stock (affichée)
+- **Accueil** : trois espaces, Terrain, Fleet management et Gestion de stock, selon les droits du profil.
+- **Articles et quantités** : stock en temps réel, emplacement, alertes sous le minimum.
+- **Bon de réception** (entrée) et **bon de livraison** (sortie) :
+  - plusieurs articles par bon, ajoutés par scan ou par recherche ;
+  - numéro unique **BR-AAAA-NNNN** ou **BL-AAAA-NNNN** ;
+  - impression **A5** dès la validation ;
+  - le bon et ses mouvements sont enregistrés ensemble ; une sortie supérieure au stock est refusée.
+- **Emplacement** de chaque article : rack **A à G**, étage **1 (bas) à 4 (haut)**, case (8 par étage, réglable
+  dans Paramètres). Il se choisit sur la fiche article ou à la réception.
+- **Magasin 3D** : plan du magasin avec ses racks. Les cases occupées sont colorées (en stock, sous le minimum,
+  rupture). « 📍 Voir dans le magasin 3D », depuis un article, amène directement à sa case.
+
 ### 3. Fleet management
 - **Fiche équipement** : code interne, type, immatriculation ou n° de série, compteur en km ou en heures,
   conducteur affecté, statut.
@@ -115,14 +128,15 @@ La case **« Demandeur autorisé »** ajoute n'importe quel compte à la liste d
   alertes de ses modules : stock min, échéance de document, maintenance due, retard fournisseur,
   consommation anormale, benne immobile.
 - **Exports** Excel (CSV) et PDF (impression) sur toutes les listes.
-- **KPI** par période, pour la direction et les responsables.
+- **Pilotage (KPI)** par période, dans le menu Fleet management, pour la direction et les responsables.
 
 ## Installation
 
 ### 1. Base de données Supabase
 1. Créez un projet sur <https://supabase.com> (région Europe).
 2. **SQL Editor** : exécutez dans l'ordre `supabase/migrations/20261002000000_init.sql`, puis
-   `supabase/migrations/20261019000000_planning.sql` (ce second fichier peut être relancé sans risque).
+   `supabase/migrations/20261019000000_planning.sql`, puis `supabase/migrations/20261029000000_stock.sql` (ces deux
+   fichiers peuvent être relancés sans risque).
    > ⚠️ Si une **ancienne version** a déjà été installée, exécutez d'abord `supabase/reset.sql`. Il efface
    > les données de l'application ; les comptes de connexion sont conservés.
 3. **Authentication → Sign In / Providers** : désactivez « Allow new users to sign up ».

@@ -36,14 +36,6 @@ function buildNav(p: Profile, alertes: number, hasTeam: boolean): NavSection[] {
   if (moduleOn('achats') && has('fournisseursVoir')) achats.push({ to: '/fournisseurs', label: 'Fournisseurs & termes', icon: '🏢' });
   if (achats.length) sections.push({ title: 'Achats', items: achats });
 
-  if (moduleOn('magasin') && has('magasinVoir')) {
-    sections.push({ title: 'Magasin · Spare parts', items: [
-      { to: '/magasin', label: 'Articles & stock', icon: '📦' },
-      ...(has('magasinGerer') ? [{ to: '/magasin/mouvement', label: 'Entrée / sortie (scan)', icon: '🔁' }] : []),
-      { to: '/magasin/mouvements', label: 'Historique mouvements', icon: '📜' },
-      ...(has('magasinGerer') || p.role === 'direction' ? [{ to: '/magasin/inventaires', label: 'Inventaires', icon: '🧮' }] : []),
-    ] });
-  }
   if (moduleOn('flotte') && has('flotteVoir')) {
     sections.push({ title: 'Fleet management', items: [
       { to: '/vehicules', label: 'Véhicules & engins', icon: '🚚' },
@@ -55,6 +47,22 @@ function buildNav(p: Profile, alertes: number, hasTeam: boolean): NavSection[] {
       { to: '/accidents', label: 'Accidents', icon: '🚨' },
       { to: '/gasoil', label: 'Gasoil', icon: '⛽' },
       { to: '/trajets', label: 'Trajets', icon: '🛣' },
+      ...(has('kpi') ? [{ to: '/kpi', label: 'Pilotage (KPI)', icon: '📊' }] : []),
+    ] });
+  }
+  if (moduleOn('magasin') && has('magasinVoir')) {
+    sections.push({ title: 'Gestion de stock', items: [
+      { to: '/magasin', label: 'Articles & quantités', icon: '📦' },
+      { to: '/magasin/3d', label: 'Magasin 3D', icon: '🏬' },
+      ...(has('magasinGerer') ? [
+        { to: '/magasin/bon/reception', label: 'Bon de réception (entrée)', icon: '⬇' },
+        { to: '/magasin/bon/livraison', label: 'Bon de livraison (sortie)', icon: '⬆' },
+      ] : []),
+      { to: '/magasin/bons', label: 'Bons (A5)', icon: '🧾' },
+      { to: '/magasin/mouvements', label: 'Historique mouvements', icon: '📜' },
+      ...(has('magasinGerer') || p.role === 'direction' ? [{ to: '/magasin/inventaires', label: 'Inventaires', icon: '🧮' }] : []),
+      ...(has('magasinGerer') ? [{ to: '/magasin/mouvement', label: 'Saisie rapide (scan)', icon: '🔁' }] : []),
+      ...(has('kpi') && !(moduleOn('flotte') && has('flotteVoir')) ? [{ to: '/kpi', label: 'Pilotage (KPI)', icon: '📊' }] : []),
     ] });
   }
   if (moduleOn('bennes') && has('bennesVoir')) {
@@ -64,13 +72,15 @@ function buildNav(p: Profile, alertes: number, hasTeam: boolean): NavSection[] {
       ...(has('bennesMouvement') && !has('terrain') ? [{ to: '/bennes/mouvement', label: 'Mouvement de benne', icon: '🔁' }] : []),
     ] });
   }
-  const pilotage: NavItem[] = [];
-  if (has('kpi')) pilotage.push({ to: '/kpi', label: 'Indicateurs (KPI)', icon: '📊' });
+  // Sans accès Fleet ni stock, le pilotage reste accessible ici.
+  const kpiAilleurs = (moduleOn('flotte') && has('flotteVoir')) || (moduleOn('magasin') && has('magasinVoir'));
+  const admin: NavItem[] = [];
+  if (has('kpi') && !kpiAilleurs) admin.push({ to: '/kpi', label: 'Pilotage (KPI)', icon: '📊' });
   if (has('admin')) {
-    pilotage.push({ to: '/utilisateurs', label: 'Utilisateurs & accès', icon: '👤' });
-    pilotage.push({ to: '/parametres', label: 'Paramètres', icon: '⚙' });
+    admin.push({ to: '/utilisateurs', label: 'Utilisateurs & accès', icon: '👤' });
+    admin.push({ to: '/parametres', label: 'Paramètres', icon: '⚙' });
   }
-  if (pilotage.length) sections.push({ title: 'Pilotage', items: pilotage });
+  if (admin.length) sections.push({ title: 'Administration', items: admin });
   return sections;
 }
 
@@ -113,7 +123,7 @@ export default function Layout() {
               <NavLink
                 key={n.to}
                 to={n.to}
-                end={n.to === '/' || n.to === '/magasin' || n.to === '/bennes'}
+                end={n.to === '/' || n.to === '/magasin' || n.to === '/magasin/bons' || n.to === '/bennes'}
                 className={({ isActive }) =>
                   cx(
                     'flex items-center gap-3 rounded-lg px-3 py-1.5 text-sm font-medium',
@@ -177,7 +187,7 @@ function Brand() {
       <img src="/favicon.svg" alt="" className="h-8 w-8" />
       <div className="leading-tight">
         <div className="font-bold">Valorise Maroc</div>
-        <div className="text-xs text-slate-400">{moduleOn('achats') ? 'Achats · Magasin · Flotte · Bennes' : 'Fleet management'}</div>
+        <div className="text-xs text-slate-400">{moduleOn('achats') ? 'Achats · Magasin · Flotte · Bennes' : moduleOn('magasin') ? 'Fleet · Gestion de stock' : 'Fleet management'}</div>
       </div>
     </div>
   );

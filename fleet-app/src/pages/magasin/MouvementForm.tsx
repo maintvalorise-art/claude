@@ -101,7 +101,7 @@ export default function MouvementForm() {
           ))}
         </div>
         <ScanInput onScan={lookup} />
-        {type === 'entree' && <p className="mt-2 text-xs text-slate-500">Les réceptions de commandes se font depuis la demande d'achat (bouton « Réceptionner »).</p>}
+        {type === 'entree' && <p className="mt-2 text-xs text-slate-500">Pour une livraison fournisseur avec plusieurs articles, utilisez le <Link className="underline" to="/magasin/bon/reception">bon de réception</Link> (numéroté, imprimable A5).</p>}
       </Card>
       <ErrorBox>{error}</ErrorBox>
       {article && (

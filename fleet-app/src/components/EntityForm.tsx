@@ -1,11 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { errorMessage } from '../lib/supabase';
+import EmplacementPicker from './EmplacementPicker';
 import { Button, ErrorBox, Field, Input, Select, Textarea, cx } from './ui';
 
 export type FieldDef = {
   name: string;
   label: ReactNode;
-  type?: 'text' | 'number' | 'date' | 'datetime' | 'select' | 'textarea' | 'checkbox' | 'tags' | 'email' | 'tel';
+  type?: 'text' | 'number' | 'date' | 'datetime' | 'select' | 'textarea' | 'checkbox' | 'tags' | 'email' | 'tel' | 'emplacement';
   options?: [string, string][];
   required?: boolean;
   hint?: ReactNode;
@@ -97,6 +98,8 @@ export default function EntityForm({
                 {f.options?.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </Select>
             );
+          } else if (f.type === 'emplacement') {
+            input = <EmplacementPicker value={String(v)} onChange={(x) => set(f.name, x)} required={f.required} />;
           } else if (f.type === 'textarea') {
             input = <Textarea {...common} value={String(v)} onChange={(e) => set(f.name, e.target.value)} rows={3} />;
           } else if (f.type === 'tags') {
