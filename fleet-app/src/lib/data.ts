@@ -77,20 +77,18 @@ export async function uploadPhotos(bucket: string, folder: string, files: FileLi
   return paths;
 }
 
-/** Appelle la fonction Edge « admin-users » (création de comptes, mots de passe, activation). */
+/** Comptes (création, mot de passe, activation) via les fonctions SQL réservées aux admins. */
 export async function adminUsers(body: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke('admin-users', { body });
-  if (error) {
-    const ctx = (error as { context?: Response }).context;
-    let msg = error.message;
-    if (ctx && typeof ctx.json === 'function') {
-      try {
-        msg = ((await ctx.json()) as { error?: string }).error ?? msg;
-      } catch {
-        /* réponse non JSON */
-      }
-    }
-    throw new Error(msg);
-  }
+  const str = (v: unknown) => (v == null || v === '' ? null : String(v));
+  const call = (fn: string, args: Record<string, unknown>) => supabase.rpc(fn, args);
+  const { data, error } = body.action === 'create'
+    ? await call('admin_creer_compte', {
+      p_username: str(body.username), p_password: str(body.password), p_full_name: str(body.full_name), p_role: str(body.role) ?? 'chauffeur',
+      p_phone: str(body.phone), p_service: str(body.service), p_manager_id: str(body.manager_id), p_demandeur_autorise: Boolean(body.demandeur_autorise),
+    })
+    : body.action === 'set_password'
+      ? await call('admin_mot_de_passe', { p_user_id: body.user_id, p_password: str(body.password) })
+      : await call('admin_activer_compte', { p_user_id: body.user_id, p_active: Boolean(body.active) });
+  if (error) throw new Error(error.code === 'PGRST202' ? "Lancez d'abord le script SQL des comptes dans Supabase." : error.message);
   return data;
 }

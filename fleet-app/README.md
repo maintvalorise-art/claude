@@ -141,8 +141,8 @@ La case **« Demandeur autorisé »** ajoute n'importe quel compte à la liste d
 ### 1. Base de données Supabase
 1. Créez un projet sur <https://supabase.com> (région Europe).
 2. **SQL Editor** : exécutez dans l'ordre `supabase/migrations/20261002000000_init.sql`, puis
-   `supabase/migrations/20261019000000_planning.sql`, puis `supabase/migrations/20261029000000_stock.sql` (ces deux
-   fichiers peuvent être relancés sans risque).
+   `supabase/migrations/20261019000000_planning.sql`, `supabase/migrations/20261029000000_stock.sql` et
+   `supabase/migrations/20261030000000_comptes.sql` (ces trois derniers fichiers peuvent être relancés sans risque).
    > ⚠️ Si une **ancienne version** a déjà été installée, exécutez d'abord `supabase/reset.sql`. Il efface
    > les données de l'application ; les comptes de connexion sont conservés.
 3. **Authentication → Sign In / Providers** : désactivez « Allow new users to sign up ».
@@ -154,17 +154,13 @@ La case **« Demandeur autorisé »** ajoute n'importe quel compte à la liste d
    update public.profiles set role = 'admin', full_name = 'Votre nom' where email = 'votre@email.com';
    ```
 
-### 3. Fonctions Edge (création des comptes, e-mails d'alerte)
-Vous pouvez les créer depuis le tableau de bord : **Edge Functions → Deploy a new function → Via Editor**.
-Collez le contenu de `supabase/functions/admin-users/index.ts` sous le nom `admin-users`, puis faites de même
-pour `daily-alerts` en désactivant « Verify JWT ».
-
-Ou avec la CLI :
-```bash
-npx supabase login && npx supabase link --project-ref <ref>
-npx supabase functions deploy admin-users
-npx supabase functions deploy daily-alerts --no-verify-jwt
-```
+### 3. Comptes et e-mails d'alerte
+- **Comptes** : exécutez `supabase/migrations/20261030000000_comptes.sql` dans le SQL Editor. L'administrateur crée
+  ensuite les comptes depuis **Utilisateurs & accès** : identifiant simple sans e-mail (ex. `ahmed`), mot de passe,
+  profil. Il peut aussi changer un mot de passe ou désactiver un compte. Aucune Edge Function n'est nécessaire.
+- **E-mails d'alerte** (optionnel) : fonction `daily-alerts`, à créer dans **Edge Functions → Deploy a new function →
+  Via Editor** en désactivant « Verify JWT ». Vérifiez que l'adresse de la fonction se termine bien par
+  `/functions/v1/daily-alerts`.
 
 ### 4. Application (Vercel)
 1. Importez le dépôt GitHub sur <https://vercel.com>. La « Root Directory » doit pointer vers le dossier qui
