@@ -70,10 +70,16 @@ La case **« Demandeur autorisé »** ajoute n'importe quel compte à la liste d
   - numéro unique **BR-AAAA-NNNN** ou **BL-AAAA-NNNN** ;
   - impression **A5** dès la validation ;
   - le bon et ses mouvements sont enregistrés ensemble ; une sortie supérieure au stock est refusée.
-- **Emplacement** de chaque article : rack **A à G**, étage **1 (bas) à 4 (haut)**, case (8 par étage, réglable
-  dans Paramètres). Il se choisit sur la fiche article ou à la réception.
-- **Magasin 3D** : plan du magasin avec ses racks. Les cases occupées sont colorées (en stock, sous le minimum,
-  rupture). « 📍 Voir dans le magasin 3D », depuis un article, amène directement à sa case.
+- **Emplacement** de chaque article : rack **A à G**, étage **1 (bas) à 4 (haut)**, case. Il se choisit sur la fiche
+  article ou à la réception. Le nombre de cases par étage se règle rack par rack dans Paramètres.
+- **Magasin 3D** : plan réel du magasin, avec les racks le long des murs (vue de dessus, entrée en bas) :
+  ```
+          C            D
+     B                      E
+          A  [entrée]  G    F
+  ```
+  Les cases occupées sont colorées (en stock, sous le minimum, rupture). « 📍 Voir dans le magasin 3D », depuis un
+  article, amène directement à sa case. La disposition se modifie dans `src/lib/stock.ts` (constante `PLAN`).
 
 ### 3. Fleet management
 - **Fiche équipement** : code interne, type, immatriculation ou n° de série, compteur en km ou en heures,

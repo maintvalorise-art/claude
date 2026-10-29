@@ -24,9 +24,18 @@ alter table public.mouvements_stock add column if not exists bon_id uuid referen
 create index if not exists mouvements_stock_bon_idx on public.mouvements_stock (bon_id);
 
 -- Emplacement d'un article : "A-2-3" = rack A, étage 2 (1 = en bas), case 3.
-insert into public.parametres (cle, valeur, libelle)
-values ('magasin_cases_par_etage', 8, 'Magasin 3D : nombre de cases par étage dans chaque rack (A à G)')
+-- Racks le long des murs du magasin : nombre de cases par étage de chaque rack.
+insert into public.parametres (cle, valeur, libelle) values
+  ('magasin_cases_A', 6, 'Magasin : nombre de cases par étage du rack A (mur de l''entrée, à gauche)'),
+  ('magasin_cases_B', 4, 'Magasin : nombre de cases par étage du rack B (mur de gauche)'),
+  ('magasin_cases_C', 5, 'Magasin : nombre de cases par étage du rack C (mur du fond, à gauche)'),
+  ('magasin_cases_D', 8, 'Magasin : nombre de cases par étage du rack D (mur du fond, à droite)'),
+  ('magasin_cases_E', 4, 'Magasin : nombre de cases par étage du rack E (mur de droite)'),
+  ('magasin_cases_F', 4, 'Magasin : nombre de cases par étage du rack F (mur de l''entrée, au bout à droite)'),
+  ('magasin_cases_G', 3, 'Magasin : nombre de cases par étage du rack G (mur de l''entrée, à droite de la porte)')
 on conflict (cle) do nothing;
+-- Réglage unique de la première version, remplacé par un réglage par rack.
+delete from public.parametres where cle = 'magasin_cases_par_etage';
 
 -- Crée le bon et tous ses mouvements en une seule opération : si une ligne
 -- est refusée (stock insuffisant…), rien n'est enregistré.

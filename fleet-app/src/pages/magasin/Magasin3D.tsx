@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Badge, Button, Card, ErrorBox, Input, PageHeader, Spinner } from '../../components/ui';
 import { fetchArticles } from '../../lib/data';
 import { fmtNumber } from '../../lib/format';
-import { ETAGES, RACKS, formatEmplacement, libelleEmplacement, parseEmplacement, useCasesParEtage } from '../../lib/stock';
+import { ENTREE, ETAGES, PLAN, RACKS, formatEmplacement, libelleEmplacement, parseEmplacement, useCasesParRack, type Rack } from '../../lib/stock';
 import type { Article } from '../../lib/types';
 import { useAsync } from '../../lib/useAsync';
 
@@ -13,7 +13,6 @@ import { useAsync } from '../../lib/useAsync';
 const CW = 1.0; // largeur d'une case
 const D = 0.9; // profondeur du rack
 const H = 0.75; // hauteur d'un étage
-const ALLEE = 1.9; // allée entre deux racks
 
 type Etat = 'ok' | 'min' | 'rupture';
 const COULEUR: Record<Etat, number> = { ok: 0x16a34a, min: 0xf59e0b, rupture: 0xdc2626 };
@@ -58,10 +57,10 @@ interface Scene3D {
   overview: () => void;
 }
 
-/** Magasin en 3D : racks A à G, 4 étages ; chaque article est rangé dans sa case. */
+/** Magasin en 3D : racks A à G le long des murs, 4 étages ; chaque article est rangé dans sa case. */
 export default function Magasin3D() {
   const [params, setParams] = useSearchParams();
-  const casesParam = useCasesParEtage();
+  const casesParam = useCasesParRack();
   const { data: articles, loading, error } = useAsync(() => fetchArticles(true));
   const mountRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<Scene3D | null>(null);
@@ -73,18 +72,18 @@ export default function Magasin3D() {
   const { parCase, sansPlace, cases } = useMemo(() => {
     const m = new Map<string, Article[]>();
     const sans: Article[] = [];
-    let maxCase = casesParam;
+    const cases = { ...casesParam };
     for (const a of articles ?? []) {
       const e = parseEmplacement(a.emplacement);
       if (!e) {
         sans.push(a);
         continue;
       }
-      maxCase = Math.max(maxCase, e.case);
+      cases[e.rack] = Math.max(cases[e.rack], e.case);
       const k = formatEmplacement(e);
       m.set(k, [...(m.get(k) ?? []), a]);
     }
-    return { parCase: m, sansPlace: sans, cases: maxCase };
+    return { parCase: m, sansPlace: sans, cases };
   }, [articles, casesParam]);
 
   const trouves = useMemo(() => {
@@ -98,13 +97,13 @@ export default function Magasin3D() {
     const mount = mountRef.current;
     if (!mount || !articles) return;
 
-    const largeur = cases * CW;
-    const pas = D + ALLEE;
-    const x0 = -largeur / 2;
-    const z0 = -((RACKS.length - 1) * pas) / 2;
     const hauteur = ETAGES * H;
-    const centre = (rack: string, etage: number, c: number) =>
-      new THREE.Vector3(x0 + (c - 0.5) * CW, (etage - 1) * H + 0.06 + H * 0.32, z0 + RACKS.indexOf(rack as (typeof RACKS)[number]) * pas);
+    // Chaque rack est construit dans son repère : longueur sur +X, face avant (allée) vers +Z.
+    const groupes = new Map<Rack, THREE.Group>();
+    const axe = (r: Rack) => new THREE.Vector3(Math.cos(PLAN[r].angle), 0, -Math.sin(PLAN[r].angle));
+    const devant = (r: Rack) => new THREE.Vector3(Math.sin(PLAN[r].angle), 0, Math.cos(PLAN[r].angle));
+    const centre = (rack: Rack, etage: number, c: number) =>
+      groupes.get(rack)!.localToWorld(new THREE.Vector3((c - 0.5) * CW, (etage - 1) * H + 0.06 + H * 0.32, 0));
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -123,101 +122,124 @@ export default function Magasin3D() {
 
     scene.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6));
     const sun = new THREE.DirectionalLight(0xffffff, 1.4);
-    sun.position.set(largeur, 18, 10);
+    sun.position.set(8, 18, 10);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
     Object.assign(sun.shadow.camera, { left: -25, right: 25, top: 25, bottom: -25 });
     scene.add(sun);
-
-    // Sol et murs du magasin (rectangle).
-    const solL = largeur + 5;
-    const solP = (RACKS.length - 1) * pas + D + 4;
-    const sol = new THREE.Mesh(new THREE.PlaneGeometry(solL, solP), new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }));
-    sol.rotation.x = -Math.PI / 2;
-    sol.receiveShadow = true;
-    scene.add(sol);
-    const grille = new THREE.GridHelper(Math.max(solL, solP), Math.round(Math.max(solL, solP)), 0xb6c2d1, 0xb6c2d1);
-    grille.position.y = 0.002;
-    scene.add(grille);
-    const murMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.35 });
-    for (const [w, d, x, z] of [[solL, 0.15, 0, -solP / 2], [solL, 0.15, 0, solP / 2], [0.15, solP, -solL / 2, 0], [0.15, solP, solL / 2, 0]]) {
-      const mur = new THREE.Mesh(new THREE.BoxGeometry(w, 1.2, d), murMat);
-      mur.position.set(x, 0.6, z);
-      scene.add(mur);
-    }
-    const entree = label('ENTRÉE', 0.5, '#ffffff', '#0f172a');
-    entree.position.set(0, 1.6, solP / 2);
-    scene.add(entree);
 
     // Racks : montants bleus, lisses orange, plateaux gris.
     const montantMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8 });
     const lisseMat = new THREE.MeshStandardMaterial({ color: 0xea580c });
     const plateauMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0 });
     const montantGeo = new THREE.BoxGeometry(0.06, hauteur + 0.15, 0.06);
-    const lisseGeo = new THREE.BoxGeometry(largeur, 0.07, 0.05);
-    const plateauGeo = new THREE.BoxGeometry(largeur, 0.03, D);
     const pickables: THREE.Mesh[] = [];
     const pickGeo = new THREE.BoxGeometry(CW * 0.96, H * 0.9, D);
     const pickMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+    const binGeo = new THREE.BoxGeometry(CW * 0.78, H * 0.6, D * 0.75);
     const binMat = (e: Etat) => new THREE.MeshStandardMaterial({ color: COULEUR[e], roughness: 0.6 });
-    const bins = new Map<string, THREE.Mesh>();
 
-    RACKS.forEach((rack, ri) => {
-      const z = z0 + ri * pas;
-      for (let c = 0; c <= cases; c++) {
+    for (const rack of RACKS) {
+      const n = cases[rack];
+      const L = n * CW;
+      const g = new THREE.Group();
+      const u = axe(rack);
+      g.rotation.y = PLAN[rack].angle;
+      g.position.set(PLAN[rack].cx - (u.x * L) / 2, 0, PLAN[rack].cz - (u.z * L) / 2);
+      scene.add(g);
+      groupes.set(rack, g);
+      for (let c = 0; c <= n; c++) {
         for (const dz of [-D / 2, D / 2]) {
           const m = new THREE.Mesh(montantGeo, montantMat);
-          m.position.set(x0 + c * CW, (hauteur + 0.15) / 2, z + dz);
+          m.position.set(c * CW, (hauteur + 0.15) / 2, dz);
           m.castShadow = true;
-          scene.add(m);
+          g.add(m);
         }
       }
+      const lisseGeo = new THREE.BoxGeometry(L, 0.07, 0.05);
+      const plateauGeo = new THREE.BoxGeometry(L, 0.03, D);
       for (let e = 0; e <= ETAGES; e++) {
         const y = e * H + 0.04;
         const p = new THREE.Mesh(plateauGeo, plateauMat);
-        p.position.set(0, y, z);
+        p.position.set(L / 2, y, 0);
         p.receiveShadow = true;
-        scene.add(p);
+        g.add(p);
         for (const dz of [-D / 2, D / 2]) {
           const l = new THREE.Mesh(lisseGeo, lisseMat);
-          l.position.set(0, y, z + dz);
-          scene.add(l);
+          l.position.set(L / 2, y, dz);
+          g.add(l);
         }
       }
-      // Lettre du rack aux deux bouts, numéros d'étage à gauche, numéros de case devant.
-      for (const x of [x0 - 0.9, -x0 + 0.9]) {
-        const s = label(rack, 0.9, '#ffffff', '#1d4ed8');
-        s.position.set(x, hauteur + 0.6, z);
-        scene.add(s);
-      }
+      // Lettre du rack au-dessus du milieu, numéros d'étage à gauche, numéros de case devant.
+      const lettre = label(rack, 1, '#ffffff', '#1d4ed8');
+      lettre.position.set(L / 2, hauteur + 0.7, 0);
+      g.add(lettre);
       for (let e = 1; e <= ETAGES; e++) {
         const s = label(String(e), 0.32, '#334155');
-        s.position.set(x0 - 0.35, (e - 1) * H + H / 2, z);
-        scene.add(s);
+        s.position.set(-0.3, (e - 1) * H + H / 2, 0);
+        g.add(s);
       }
-      for (let c = 1; c <= cases; c++) {
+      for (let c = 1; c <= n; c++) {
         const s = label(String(c), 0.28, '#475569');
-        s.position.set(x0 + (c - 0.5) * CW, 0.18, z + D / 2 + 0.3);
-        scene.add(s);
+        s.position.set((c - 0.5) * CW, 0.18, D / 2 + 0.35);
+        g.add(s);
         for (let e = 1; e <= ETAGES; e++) {
           const code = formatEmplacement({ rack, etage: e, case: c });
-          const pos = centre(rack, e, c);
+          const local = new THREE.Vector3((c - 0.5) * CW, (e - 1) * H + 0.06 + H * 0.32, 0);
           const pick = new THREE.Mesh(pickGeo, pickMat);
-          pick.position.copy(pos);
+          pick.position.copy(local);
           pick.userData.code = code;
-          scene.add(pick);
+          g.add(pick);
           pickables.push(pick);
           const list = parCase.get(code);
           if (list) {
-            const bin = new THREE.Mesh(new THREE.BoxGeometry(CW * 0.78, H * 0.6, D * 0.75), binMat(etatCase(list)));
-            bin.position.copy(pos);
+            const bin = new THREE.Mesh(binGeo, binMat(etatCase(list)));
+            bin.position.copy(local);
             bin.castShadow = true;
-            scene.add(bin);
-            bins.set(code, bin);
+            g.add(bin);
           }
         }
       }
-    });
+      g.updateMatrixWorld(true);
+    }
+
+    // Sol et murs : rectangle autour des racks, entrée dans le mur du bas entre A et G.
+    const boite = new THREE.Box3();
+    for (const g of groupes.values()) boite.expandByObject(g);
+    const xMin = boite.min.x - 1.2, xMax = boite.max.x + 1.2, zMin = boite.min.z - 1.2, zMax = boite.max.z + 1.2;
+    const solL = xMax - xMin;
+    const solP = zMax - zMin;
+    const sol = new THREE.Mesh(new THREE.PlaneGeometry(solL, solP), new THREE.MeshStandardMaterial({ color: 0xcbd5e1 }));
+    sol.rotation.x = -Math.PI / 2;
+    sol.position.set((xMin + xMax) / 2, 0, (zMin + zMax) / 2);
+    sol.receiveShadow = true;
+    scene.add(sol);
+    const grille = new THREE.GridHelper(Math.ceil(Math.max(solL, solP)), Math.ceil(Math.max(solL, solP)), 0xb6c2d1, 0xb6c2d1);
+    grille.position.set((xMin + xMax) / 2, 0.002, (zMin + zMax) / 2);
+    scene.add(grille);
+    const murMat = new THREE.MeshStandardMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.35 });
+    const mur = (x1: number, z1: number, x2: number, z2: number) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(Math.abs(x2 - x1), 0.15), 1.2, Math.max(Math.abs(z2 - z1), 0.15)), murMat);
+      m.position.set((x1 + x2) / 2, 0.6, (z1 + z2) / 2);
+      scene.add(m);
+    };
+    const porteG = ENTREE.x - ENTREE.largeur / 2, porteD = ENTREE.x + ENTREE.largeur / 2;
+    mur(xMin, zMin, xMax, zMin);
+    mur(xMin, zMin, xMin, zMax);
+    mur(xMax, zMin, xMax, zMax);
+    mur(xMin, zMax, porteG, zMax);
+    mur(porteD, zMax, xMax, zMax);
+    const seuil = new THREE.Mesh(new THREE.PlaneGeometry(ENTREE.largeur, 1.6), new THREE.MeshStandardMaterial({ color: 0x22c55e }));
+    seuil.rotation.x = -Math.PI / 2;
+    seuil.position.set(ENTREE.x, 0.004, zMax - 0.6);
+    scene.add(seuil);
+    const flecheEntree = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.9, 3), new THREE.MeshStandardMaterial({ color: 0x15803d }));
+    flecheEntree.rotation.set(-Math.PI / 2, 0, 0);
+    flecheEntree.position.set(ENTREE.x, 0.05, zMax - 0.6);
+    scene.add(flecheEntree);
+    const entree = label('ENTRÉE', 0.55, '#ffffff', '#15803d');
+    entree.position.set(ENTREE.x, 1.7, zMax);
+    scene.add(entree);
 
     // Repères de survol et de sélection.
     const survol = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(CW * 0.98, H * 0.92, D * 1.02)), new THREE.LineBasicMaterial({ color: 0x0ea5e9 }));
@@ -236,11 +258,12 @@ export default function Magasin3D() {
     const voler = (pos: THREE.Vector3, cible: THREE.Vector3) => {
       anim = { p0: camera.position.clone(), p1: pos, t0: controls.target.clone(), t1: cible, start: performance.now() };
     };
-    // Vue d'ensemble : plus de recul sur un écran étroit (téléphone en portrait).
-    const posGenerale = () => new THREE.Vector3(largeur * 0.55, Math.max(12, largeur * 0.9), solP * 0.85).multiplyScalar(Math.max(1, 1.1 / camera.aspect));
-    const vueGenerale = () => voler(posGenerale(), new THREE.Vector3(0, 0, 0));
+    // Vue d'ensemble depuis l'entrée : plus de recul sur un écran étroit (téléphone en portrait).
+    const milieu = new THREE.Vector3((xMin + xMax) / 2, 0, (zMin + zMax) / 2);
+    const posGenerale = () => new THREE.Vector3(1.5, solL * 0.7, solP * 1.25).multiplyScalar(Math.max(1, 1.3 / camera.aspect)).add(milieu);
+    const vueGenerale = () => voler(posGenerale(), milieu.clone());
     camera.position.copy(posGenerale());
-    controls.target.set(0, 0, 0);
+    controls.target.copy(milieu);
 
     let selCode: string | null = null;
     const select = (code: string | null, fly = true) => {
@@ -252,10 +275,11 @@ export default function Magasin3D() {
       }
       const pos = centre(e.rack, e.etage, e.case);
       cadre.position.copy(pos);
+      cadre.rotation.y = PLAN[e.rack].angle;
       fleche.position.set(pos.x, hauteur + 0.9, pos.z);
       cadre.visible = fleche.visible = true;
-      // Vue de trois quarts depuis l'allée devant le rack (sans passer derrière le rack suivant).
-      if (fly) voler(new THREE.Vector3(pos.x + 2.2, pos.y + 0.9, pos.z + D / 2 + ALLEE * 0.8), pos.clone());
+      // Vue de trois quarts depuis le centre du magasin, face au rack.
+      if (fly) voler(pos.clone().addScaledVector(devant(e.rack), 3.6).addScaledVector(axe(e.rack), 1.4).add(new THREE.Vector3(0, 1.3, 0)), pos.clone());
     };
     sceneRef.current = { select, overview: vueGenerale };
 
@@ -274,7 +298,10 @@ export default function Magasin3D() {
       setHover(code);
       const e = parseEmplacement(code);
       survol.visible = !!e;
-      if (e) survol.position.copy(centre(e.rack, e.etage, e.case));
+      if (e) {
+        survol.position.copy(centre(e.rack, e.etage, e.case));
+        survol.rotation.y = PLAN[e.rack].angle;
+      }
       renderer.domElement.style.cursor = code ? 'pointer' : 'grab';
     };
     const onDown = (ev: PointerEvent) => {
@@ -368,7 +395,7 @@ export default function Magasin3D() {
     <div className="space-y-4">
       <PageHeader
         title="🏬 Magasin 3D"
-        subtitle={`Racks A à G · ${ETAGES} étages · ${cases} cases par étage. Faites tourner avec la souris ou le doigt, cliquez sur une case pour voir son contenu.`}
+        subtitle={`Racks A à G le long des murs · ${ETAGES} étages · ${RACKS.map((r) => `${r} ${cases[r]}`).join(', ')} cases. Faites tourner avec la souris ou le doigt, cliquez sur une case pour voir son contenu.`}
         actions={<Link to="/magasin"><Button variant="secondary">📋 Liste du stock</Button></Link>}
       />
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
