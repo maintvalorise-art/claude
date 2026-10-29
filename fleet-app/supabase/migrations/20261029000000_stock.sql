@@ -37,6 +37,12 @@ on conflict (cle) do nothing;
 -- Réglage unique de la première version, remplacé par un réglage par rack.
 delete from public.parametres where cle = 'magasin_cases_par_etage';
 
+-- Catégories d'articles du fichier de stock : outillage, EPI, fournitures de bureau, matière première.
+alter table public.articles drop constraint if exists articles_categorie_check;
+alter table public.articles add constraint articles_categorie_check check (categorie in (
+  'mecanique', 'electrique', 'hydraulique', 'pneumatique', 'filtration', 'pneus', 'consommables',
+  'outillage', 'epi', 'fournitures_bureau', 'matiere_premiere', 'autre'));
+
 -- Crée le bon et tous ses mouvements en une seule opération : si une ligne
 -- est refusée (stock insuffisant…), rien n'est enregistré.
 create or replace function public.creer_bon_stock(p_type text, p_entete jsonb, p_lignes jsonb)

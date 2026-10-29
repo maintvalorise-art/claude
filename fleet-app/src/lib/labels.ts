@@ -249,6 +249,10 @@ export const ARTICLE_CATEGORIE: Record<ArticleCategorie, string> = {
   filtration: 'Filtration',
   pneus: 'Pneus',
   consommables: 'Consommables',
+  outillage: 'Outillage',
+  epi: 'EPI (équipement de protection)',
+  fournitures_bureau: 'Fournitures de bureau',
+  matiere_premiere: 'Matière première',
   autre: 'Autre',
 };
 

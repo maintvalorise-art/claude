@@ -468,7 +468,8 @@ export interface PrixHistorique {
 // ---------- Magasin ----------
 export type Criticite = 'A' | 'B' | 'C';
 export type ArticleCategorie =
-  | 'mecanique' | 'electrique' | 'hydraulique' | 'pneumatique' | 'filtration' | 'pneus' | 'consommables' | 'autre';
+  | 'mecanique' | 'electrique' | 'hydraulique' | 'pneumatique' | 'filtration' | 'pneus' | 'consommables'
+  | 'outillage' | 'epi' | 'fournitures_bureau' | 'matiere_premiere' | 'autre';
 export interface Article {
   id: string;
   code: string;
