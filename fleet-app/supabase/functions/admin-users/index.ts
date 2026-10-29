@@ -5,9 +5,9 @@ import { createClient } from 'npm:@supabase/supabase-js@2';
 
 const LOGIN_DOMAIN = Deno.env.get('LOGIN_DOMAIN') ?? 'flotte.local';
 
-const cors = {
+const cors: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-region, x-supabase-api-version',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -23,7 +23,11 @@ function toEmail(username: string) {
 const ROLES = ['admin', 'direction', 'acheteur', 'magasinier', 'responsable_flotte', 'exploitation', 'chauffeur', 'demandeur'];
 
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
+  // Pré-vérification du navigateur : accepte les en-têtes envoyés par la version de supabase-js utilisée.
+  if (req.method === 'OPTIONS') {
+    const demandes = req.headers.get('Access-Control-Request-Headers');
+    return new Response('ok', { headers: demandes ? { ...cors, 'Access-Control-Allow-Headers': demandes } : cors });
+  }
   if (req.method !== 'POST') return json({ error: 'Méthode non autorisée' }, 405);
 
   const url = Deno.env.get('SUPABASE_URL')!;
