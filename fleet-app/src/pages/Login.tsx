@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Button, ErrorBox, Field, Input } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
+import { moduleOn } from '../lib/config';
 import { errorMessage } from '../lib/supabase';
 
 export default function Login() {
@@ -30,7 +31,7 @@ export default function Login() {
           <img src="/favicon.svg" alt="" className="h-10 w-10" />
           <div>
             <h1 className="text-lg font-bold">Valorise Maroc</h1>
-            <p className="text-xs text-slate-500">Achats · Magasin · Flotte · Bennes</p>
+            <p className="text-xs text-slate-500">{moduleOn('achats') ? 'Achats · Magasin · Flotte · Bennes' : moduleOn('magasin') ? 'Fleet · Gestion de stock' : 'Fleet management'}</p>
           </div>
         </div>
         <Field label={<>Identifiant <span className="ar text-slate-500">· اسم المستخدم</span></>}>
